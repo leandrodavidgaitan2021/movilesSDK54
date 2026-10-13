@@ -131,11 +131,6 @@ export default function RecorridoScreen() {
                   Registrado el {item.fechaCheckin}
                 </Text>
               </View>
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={colors.textSecondary}
-              />
             </TouchableOpacity>
           )}
         />
