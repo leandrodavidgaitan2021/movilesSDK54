@@ -23,6 +23,13 @@ export const CATEGORIAS_MOCK: Categoria[] = [
     color: "#CD853F",
     orden: 3,
   },
+  {
+    id: "cat-naturaleza",
+    nombre: "Naturaleza y Reservas",
+    icono: "leaf-outline",
+    color: "#27ae60",
+    orden: 4,
+  },
 ];
 
 export const LUGARES_MOCK: Lugar[] = [
@@ -35,7 +42,10 @@ export const LUGARES_MOCK: Lugar[] = [
       "Complejo termal ubicado a pocos minutos del centro, equipado con piscinas de diferentes temperaturas, sector pasivo y recreativo.",
     coordenadas: { latitud: -32.2285, longitud: -58.1402 },
     direccion: "Costanera Norte y Gatica",
-    imagenes: ["https://api.colon.tur.ar/img/termas-1.jpg"],
+    imagenes: [
+      require("../../assets/images/lug-001-1.jpg"),
+      require("../../assets/images/lug-001-2.jpg"),
+    ],
     horarios: [
       { dia: 0, abre: "08:00", cierra: "19:00" },
       { dia: 1, abre: "08:00", cierra: "19:00" },
@@ -64,7 +74,7 @@ export const LUGARES_MOCK: Lugar[] = [
     categoriaId: "cat-playas",
     descripcionCorta: "Hermosa playa de arena sobre la costa de Colón.",
     descripcion:
-      "Balneario muy concorrido durante la temporada de verano, con paradores, alquiler de sombrillas y bajada náutica.",
+      "Balneario muy concurrido durante la temporada de verano, con paradores, alquiler de sombrillas y bajada náutica.",
     coordenadas: { latitud: -32.2112, longitud: -58.1345 },
     direccion: "Costanera Norte",
     imagenes: [],
@@ -113,5 +123,68 @@ export const LUGARES_MOCK: Lugar[] = [
     accesible: true,
     activo: true,
     actualizadoEn: "2026-08-10T09:00:00-03:00",
+  },
+  {
+    id: "lug-004",
+    nombre: "Museo Histórico Regional de Colón",
+    categoriaId: "cat-museos",
+    descripcionCorta: "Espacio cultural que preserva la historia de los pioneros y colonos.",
+    descripcion:
+      "Muestra objetos de la época fundacional, herramientas de los primeros inmigrantes y piezas de las culturas originarias de la región.",
+    coordenadas: { latitud: -32.2230, longitud: -58.1390 },
+    direccion: "25 de Mayo 450",
+    imagenes: [
+      require("../../assets/images/lug-004-1.jpg"),
+      require("../../assets/images/lug-004-2.jpg"),
+    ],
+    // Ejemplo: Lunes a Viernes con mismo horario, Sábados y Domingos horario reducido
+    horarios: [
+      { dia: 1, abre: "09:00", cierra: "17:00" },
+      { dia: 2, abre: "09:00", cierra: "17:00" },
+      { dia: 3, abre: "09:00", cierra: "17:00" },
+      { dia: 4, abre: "09:00", cierra: "17:00" },
+      { dia: 5, abre: "09:00", cierra: "17:00" },
+      { dia: 6, abre: "10:00", cierra: "14:00" },
+      { dia: 0, abre: "10:00", cierra: "14:00" },
+    ],
+    telefono: "3447-421111",
+    sitioWeb: null,
+    precioEntrada: 1500,
+    audioguia: null,
+    codigoQr: "COLON:lug-004",
+    accesible: false,
+    activo: true,
+    actualizadoEn: "2026-08-12T11:00:00-03:00",
+  },
+  {
+    id: "lug-005",
+    nombre: "Reserva Natural Molino Forclaz",
+    categoriaId: "cat-naturaleza",
+    descripcionCorta: "Histórico molino de viento y predio rural con senderos naturales.",
+    descripcion:
+      "Emblemático monumento histórico nacional rodeado de monte nativo, ideal para caminatas y visitas guiadas interpretativas.",
+    coordenadas: { latitud: -32.2500, longitud: -58.2000 },
+    direccion: "Primeros Colonos s/nº, 3280 ",
+    imagenes: [
+      require("../../assets/images/lug-005-1.jpg"),
+      require("../../assets/images/lug-005-2.jpg"),
+    ],
+    // Ejemplo: De martes a domingo con mismo horario, lunes cerrado (no figura)
+    horarios: [
+      { dia: 2, abre: "09:30", cierra: "18:00" },
+      { dia: 3, abre: "09:30", cierra: "18:00" },
+      { dia: 4, abre: "09:30", cierra: "18:00" },
+      { dia: 5, abre: "09:30", cierra: "18:00" },
+      { dia: 6, abre: "09:30", cierra: "18:00" },
+      { dia: 0, abre: "09:30", cierra: "18:00" },
+    ],
+    telefono: "3447-432222",
+    sitioWeb: "https://molinoforclaz.com",
+    precioEntrada: 3000,
+    audioguia: null,
+    codigoQr: "COLON:lug-005",
+    accesible: true,
+    activo: true,
+    actualizadoEn: "2026-08-15T16:00:00-03:00",
   },
 ];

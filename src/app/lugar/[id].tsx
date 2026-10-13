@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   Image,
   Linking,
   ScrollView,
@@ -12,26 +13,22 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useTheme } from "../../hooks/useTheme"; // <-- Importamos el hook del tema global
+
+
+import { useTheme } from "../../hooks/useTheme";
 import { cambiarFavorito, esFavorito } from "../../servicios/favoritos";
 import { obtenerLugares } from "../../servicios/lugares";
 import { Lugar } from "../../tipos";
+import { agruparHorarios } from "../../utils/horarios";
 
-// Diccionario auxiliar para mostrar los días de la semana de forma legible
-const DIAS_SEMANA = [
-  "Domingo",
-  "Lunes",
-  "Martes",
-  "Miércoles",
-  "Jueves",
-  "Viernes",
-  "Sábado",
-];
+// Obtenemos el ancho exacto de la pantalla actual
+const { width: ANCHO_PANTALLA } = Dimensions.get("window");
+
 
 export default function DetalleLugarScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { colors, theme } = useTheme(); // <-- Extraemos los colores y el tema actual
+  const { colors, theme } = useTheme();
 
   const [lugar, setLugar] = useState<Lugar | null>(null);
   const [cargando, setCargando] = useState<boolean>(true);
@@ -106,15 +103,13 @@ export default function DetalleLugarScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       bounces={false}
     >
-      {/* Sección de Imágenes / Carrusel visual */}
+    {/* Sección de Imágenes / Carrusel visual adaptativo a Dark/Light */}
       <View
         style={[
           styles.imagenContainer,
           {
             backgroundColor:
-              theme === "dark"
-                ? colors.card
-                : styles.imagenContainer.backgroundColor,
+              theme === "dark" ? colors.card : "#f0f0f0", // Fondo adaptativo
           },
         ]}
       >
@@ -124,34 +119,31 @@ export default function DetalleLugarScreen() {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
           >
-            {lugar.imagenes.map((imgUrl, index) => (
+            {lugar.imagenes.map((imagen, index) => (
               <Image
                 key={index}
-                source={{ uri: imgUrl }}
+                source={typeof imagen === "string" ? { uri: imagen } : imagen}
                 style={styles.imagenLugar}
               />
             ))}
           </ScrollView>
-        ) : (
+) : (
           <View
             style={[
               styles.imagenPlaceholder,
               {
-                backgroundColor:
-                  theme === "dark"
-                    ? "#1e1e1e"
-                    : styles.imagenPlaceholder.backgroundColor,
+                backgroundColor: theme === "dark" ? "#1e1e1e" : "#ecf0f1",
               },
             ]}
           >
             <Ionicons
               name="image-outline"
-              size={48}
+              size={40}
               color={colors.textSecondary}
             />
             <Text
               style={[
-                styles.imagenPlaceholderText,
+                styles.imagenPlaceholderText, // <-- Usamos el estilo correcto para textos
                 { color: colors.textSecondary },
               ]}
             >
@@ -160,18 +152,19 @@ export default function DetalleLugarScreen() {
           </View>
         )}
 
-        {/* Botón flotante para volver */}
+        {/* Botón flotante para volver adaptado */}
         <TouchableOpacity
           style={[
             styles.floatingBackButton,
             {
               backgroundColor: colors.card,
-              shadowColor: theme === "dark" ? "#000" : "#000",
+              borderColor: colors.border,
+              borderWidth: theme === "dark" ? 1 : 0,
             },
           ]}
           onPress={() => router.back()}
         >
-          <Ionicons name="arrow-back" size={22} color={colors.text} />
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -213,22 +206,19 @@ export default function DetalleLugarScreen() {
           </Text>
         </View>
 
-        {/* Información adicional: Precio, Accesibilidad, Teléfono */}
+        {/* Información adicional: Precio, Accesibilidad */}
         <View style={styles.infoRow}>
           <View
             style={[
               styles.infoBadge,
               {
-                backgroundColor:
-                  theme === "dark"
-                    ? colors.card
-                    : styles.infoBadge.backgroundColor,
+                backgroundColor: theme === "dark" ? colors.card : "#f1f8f5",
                 borderColor: colors.border,
                 borderWidth: theme === "dark" ? 1 : 0,
               },
             ]}
           >
-            <Ionicons name="ticket-outline" size={18} color={colors.primary} />
+            <Ionicons name="ticket-outline" size={16} color={colors.primary} />
             <Text style={[styles.infoBadgeText, { color: colors.text }]}>
               {lugar.precioEntrada === 0
                 ? "Entrada Gratuita"
@@ -239,10 +229,7 @@ export default function DetalleLugarScreen() {
             style={[
               styles.infoBadge,
               {
-                backgroundColor:
-                  theme === "dark"
-                    ? colors.card
-                    : styles.infoBadge.backgroundColor,
+                backgroundColor: theme === "dark" ? colors.card : "#f1f8f5",
                 borderColor: colors.border,
                 borderWidth: theme === "dark" ? 1 : 0,
               },
@@ -254,7 +241,7 @@ export default function DetalleLugarScreen() {
                   ? "accessibility-outline"
                   : "close-circle-outline"
               }
-              size={18}
+              size={16}
               color={lugar.accesible ? colors.primary : colors.textSecondary}
             />
             <Text style={[styles.infoBadgeText, { color: colors.text }]}>
@@ -263,44 +250,40 @@ export default function DetalleLugarScreen() {
           </View>
         </View>
 
-        {/* Contacto (Teléfono / Sitio Web) */}
+        {/* Contacto en línea horizontal (Teléfono / Sitio Web) */}
         {(lugar.telefono || lugar.sitioWeb) && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
               Contacto
             </Text>
-            {lugar.telefono && (
-              <TouchableOpacity
-                style={styles.contactoRow}
-                onPress={() => Linking.openURL(`tel:${lugar.telefono}`)}
-              >
-                <Ionicons
-                  name="call-outline"
-                  size={18}
-                  color={colors.primary}
-                />
-                <Text
-                  style={[styles.contactoLinkText, { color: colors.primary }]}
+            <View style={styles.contactoInlineContainer}>
+              {lugar.telefono && (
+                <TouchableOpacity
+                  style={styles.contactoChip}
+                  onPress={() => Linking.openURL(`tel:${lugar.telefono}`)}
                 >
-                  {lugar.telefono}
-                </Text>
-              </TouchableOpacity>
-            )}
-            {lugar.sitioWeb && (
-              <TouchableOpacity
-                style={styles.contactoRow}
-                onPress={() => Linking.openURL(lugar.sitioWeb!)}
-              >
-                <Ionicons name="globe-outline" size={18} color="#2980b9" />
-                <Text style={[styles.contactoLinkText, { color: "#2980b9" }]}>
-                  {lugar.sitioWeb}
-                </Text>
-              </TouchableOpacity>
-            )}
+                  <Ionicons name="call-outline" size={16} color={colors.primary} />
+                  <Text style={[styles.contactoChipText, { color: colors.primary }]}>
+                    {lugar.telefono}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {lugar.sitioWeb && (
+                <TouchableOpacity
+                  style={styles.contactoChip}
+                  onPress={() => Linking.openURL(lugar.sitioWeb!)}
+                >
+                  <Ionicons name="globe-outline" size={16} color="#2980b9" />
+                  <Text style={[styles.contactoChipText, { color: "#2980b9" }]}>
+                    Sitio Web
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
 
-        {/* Horarios de Atención */}
+        {/* Horarios de Atención Agrupados */}
         {lugar.horarios && lugar.horarios.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
@@ -315,15 +298,15 @@ export default function DetalleLugarScreen() {
                 },
               ]}
             >
-              {lugar.horarios.map((h, index) => (
+              {agruparHorarios(lugar.horarios).map((item, index) => (
                 <View key={index} style={styles.horarioRow}>
                   <Text
                     style={[styles.horarioDia, { color: colors.textSecondary }]}
                   >
-                    {DIAS_SEMANA[h.dia] ?? "Día"}
+                    {item.textoDias}
                   </Text>
                   <Text style={[styles.horarioHora, { color: colors.text }]}>
-                    {h.abre} a {h.cierra} hs
+                    {item.hora}
                   </Text>
                 </View>
               ))}
@@ -348,7 +331,7 @@ export default function DetalleLugarScreen() {
             alert(`¡Check-in realizado con éxito en ${lugar.nombre}!`)
           }
         >
-          <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+          <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
           <Text style={styles.checkinButtonText}>Hacer Check-in aquí</Text>
         </TouchableOpacity>
       </View>
@@ -366,102 +349,118 @@ const styles = StyleSheet.create({
   },
   textoCargando: { marginTop: 10, fontSize: 16 },
   errorText: { fontSize: 16, marginTop: 10, marginBottom: 20 },
-  imagenContainer: { width: "100%", height: 250, backgroundColor: "#f0f0f0" },
-  imagenLugar: { width: 400, height: 250, resizeMode: "cover" },
+  imagenContainer: { 
+    width: ANCHO_PANTALLA, 
+    height: 200, 
+    backgroundColor: "#f0f0f0" 
+  },
+  imagenLugar: { 
+    width: ANCHO_PANTALLA, // Ocupa exactamente el ancho de la pantalla
+    height: 200, 
+    resizeMode: "cover" 
+  },
   imagenPlaceholder: {
-    width: "100%",
-    height: 250,
+    width: ANCHO_PANTALLA,
+    height: 200,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#ecf0f1",
   },
-  imagenPlaceholderText: { fontSize: 14, marginTop: 5 },
+  imagenPlaceholderText: { 
+    fontSize: 13, 
+    marginTop: 4 
+  },
   floatingBackButton: {
     position: "absolute",
-    top: 40,
-    left: 20,
+    top: 35,
+    left: 15,
     zIndex: 10,
-    padding: 8,
-    borderRadius: 20,
+    padding: 6,
+    borderRadius: 18,
     shadowColor: "#000",
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: 3,
     elevation: 3,
   },
-  content: { padding: 20 },
+  content: { padding: 16 },
   categoria: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "bold",
-    marginBottom: 5,
+    marginBottom: 4,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "bold",
-    marginBottom: 5,
+    marginBottom: 4,
     flex: 1,
   },
   filaTitulo: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 6,
   },
   coordenadasContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 12,
   },
-  coordenadasText: { fontSize: 13, marginLeft: 5 },
-  section: { marginBottom: 20 },
+  coordenadasText: { fontSize: 12, marginLeft: 4 },
+  section: { marginBottom: 14 },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "bold",
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  description: { fontSize: 14, lineHeight: 22 },
-  infoRow: { flexDirection: "row", gap: 10, marginBottom: 20 },
+  description: { fontSize: 13, lineHeight: 20 },
+  infoRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
   infoBadge: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f1f8f5",
-    padding: 10,
+    padding: 8,
     borderRadius: 8,
     gap: 6,
   },
-  infoBadgeText: { fontSize: 13, fontWeight: "500" },
-  contactoRow: {
+  infoBadgeText: { fontSize: 12, fontWeight: "500" },
+  contactoInlineContainer: {
     flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
+    flexWrap: "wrap",
     gap: 8,
   },
-  contactoLinkText: { fontSize: 14, fontWeight: "600" },
+  contactoChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.03)",
+    gap: 6,
+  },
+  contactoChipText: { fontSize: 13, fontWeight: "600" },
   horariosContainer: {
-    backgroundColor: "#f9f9f9",
-    padding: 12,
+    padding: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#eee",
   },
   horarioRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 4,
+    paddingVertical: 3,
   },
-  horarioDia: { fontSize: 13, fontWeight: "500" },
-  horarioHora: { fontSize: 13, fontWeight: "bold" },
+  horarioDia: { fontSize: 12, fontWeight: "500" },
+  horarioHora: { fontSize: 12, fontWeight: "bold" },
   checkinButton: {
     flexDirection: "row",
-    paddingVertical: 14,
+    paddingVertical: 12,
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 10,
-    gap: 8,
-    marginTop: 10,
-    marginBottom: 30,
+    borderRadius: 8,
+    gap: 6,
+    marginTop: 6,
+    marginBottom: 20,
   },
-  checkinButtonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  checkinButtonText: { color: "#fff", fontSize: 15, fontWeight: "bold" },
   backButton: {
     paddingVertical: 10,
     paddingHorizontal: 20,

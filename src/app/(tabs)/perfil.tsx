@@ -7,11 +7,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useRouter } from "expo-router";
 import AccesoRestringido from "../../components/AccesoRestringido";
 import { useAuth } from "../../hooks/useAuth"; // <-- Importamos el hook de autenticación global
 import { useTheme } from "../../hooks/useTheme"; // <-- Importamos el hook del tema global
 
 export default function PerfilScreen() {
+  const router = useRouter();
   const { colors, theme } = useTheme();
   const { user, isAuthenticated, cargando, logout } = useAuth(); // <-- Consumimos el contexto global
 
@@ -57,6 +59,14 @@ export default function PerfilScreen() {
           dispositivo.
         </Text>
       </View>
+
+      <TouchableOpacity
+        style={styles.favoritosButton}
+        onPress={() => router.push("/favoritos")}
+      >
+        <Ionicons name="star-outline" size={18} color="#27ae60" />
+        <Text style={styles.favoritosButtonText}>Ver mis favoritos</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity style={styles.logoutButton} onPress={logout}>
         <Text style={styles.logoutText}>Cerrar Sesión</Text>
@@ -105,6 +115,21 @@ const styles = StyleSheet.create({
   },
   cardDesc: {
     fontSize: 13,
+  },
+  favoritosButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#e8f8f0",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  favoritosButtonText: { 
+    color: "#27ae60", 
+    fontWeight: "bold", 
+    fontSize: 14 
   },
   logoutButton: {
     backgroundColor: "#e74c3c",

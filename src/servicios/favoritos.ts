@@ -1,5 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Favorito } from "../tipos";
+import { obtenerLugares } from "./lugares";
+import { Lugar } from "../tipos";
 
 const CLAVE_FAVORITOS = "@favoritos";
 
@@ -35,4 +37,12 @@ export async function cambiarFavorito(lugarId: string): Promise<boolean> {
 
     await AsyncStorage.setItem(CLAVE_FAVORITOS, JSON.stringify(nuevosFavoritos));
     return !yaExiste;
-};
+}
+
+export async function obtenerLugaresFav(): Promise<Lugar[]> {
+    const favoritos = await leerFavoritos();
+    const idsFavoritos = favoritos.map ((f) => f.lugarId);
+
+    const respuestaLugares = await obtenerLugares();
+    return respuestaLugares.datos.filter((lugar) => idsFavoritos.includes(lugar.id));
+}

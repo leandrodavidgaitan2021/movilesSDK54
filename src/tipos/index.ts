@@ -1,4 +1,5 @@
 // src/tipos/index.ts
+import { ImageSourcePropType } from "react-native";
 
 export interface Coordenadas {
   latitud: number;
@@ -25,7 +26,7 @@ export interface Lugar {
   descripcion: string;
   coordenadas: Coordenadas;
   direccion: string;
-  imagenes: string[];
+  imagenes: (string | ImageSourcePropType)[];
   horarios: Horario[];
   telefono: string | null;
   sitioWeb: string | null;
