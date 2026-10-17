@@ -1,5 +1,6 @@
 // src/context/AuthContext.tsx
 import { createContext, ReactNode, useState } from "react";
+import { borrarSesion, guardarSesion } from "../servicios/sesion";
 
 interface AuthContextType {
   user: string | null;
@@ -23,12 +24,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Guardamos el usuario y el token exclusivamente en la memoria de la app
     setUser(email);
     setToken(accessToken);
+    await guardarSesion(email, accessToken);
   };
 
   const logout = async () => {
     // Limpiamos ambos estados de la memoria
     setUser(null);
     setToken(null);
+    await borrarSesion();
   };
 
   return (

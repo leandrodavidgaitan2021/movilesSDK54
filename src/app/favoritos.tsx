@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -13,21 +13,29 @@ import {
 import { obtenerLugaresFav } from "../servicios/favoritos";
 import { Lugar } from "../tipos";
 import { useTheme } from "../hooks/useTheme";
+import { useAuth } from "../hooks/useAuth";
 
 export default function PantallaFavoritos() {
     const router = useRouter();
     const { colors, theme } = useTheme();
+    const { user } = useAuth();
     const [lugares, setLugares] = useState<Lugar[]>([]);
     const [cargando, setCargando] = useState<boolean>(true);
 
-    useEffect(() => {
-        async function cargarFavoritos() {
-            const datos = await obtenerLugaresFav();
-            setLugares(datos);
-            setCargando(false);
-        }
-        cargarFavoritos();
-    }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            async function cargarFavoritos() {
+                if (user) {
+                    setLugares(await obtenerLugaresFav(user));
+                } else {
+                    setLugares([]);
+                }
+                setCargando(false);
+            }
+            cargarFavoritos();
+        }, [user]),
+    );
 
     if (cargando) {
         return (

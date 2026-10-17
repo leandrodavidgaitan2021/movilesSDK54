@@ -15,6 +15,7 @@ import {
 import * as z from "zod";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../hooks/useTheme"; // <-- Mantenemos el hook de tema para los colores automáticos
+import { useLoginBiometrico } from "../hooks/useLoginBiometrico";
 
 const loginSchema = z.object({
   email: z
@@ -38,6 +39,17 @@ export default function LoginScreen() {
   const { redirect } = useLocalSearchParams<{ redirect?: string }>(); // <-- Capturamos la ruta de origen si existe
   const { login } = useAuth();
   const { colors } = useTheme(); // <-- Solo extraemos los colores según el tema actual o del dispositivo
+  const { disponible: hayBiometria, entrar: entrarConBiometroia } = useLoginBiometrico();
+
+  const handleLoginBiometrico = async () => {
+    const exito = await entrarConBiometroia();
+    if (!exito) return;
+    if (redirect) {
+      router.replace(redirect as any);
+    } else {
+      router.replace("/(tabs)/perfil");
+    }
+  };
 
   const {
     control,
@@ -177,6 +189,19 @@ const handleLogin = async (data: LoginFormData) => {
         >
           <Text style={styles.buttonText}>Ingresar</Text>
         </TouchableOpacity>
+        
+        {hayBiometria && (
+          <TouchableOpacity
+            style={[styles.biometriaButton, { borderColor: colors.primary }]}
+            onPress={handleLoginBiometrico}
+            accessibilityLabel="Entrar con huella o rostro"
+          >
+            <Ionicons name="finger-print" size={20} color={colors.primary} />
+            <Text style={[styles.biometriaButtonText, { color: colors.primary}]}>
+              Entrar con huella o rostro
+            </Text>
+            </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.guestButton}
@@ -201,6 +226,7 @@ const handleLogin = async (data: LoginFormData) => {
     </KeyboardAvoidingView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -266,4 +292,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  biometriaButton: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  paddingVertical: 14,
+  borderRadius: 10,
+  borderWidth: 1,
+  marginTop: 10,
+  },
+  biometriaButtonText: { fontSize: 16, fontWeight: "bold" },
 });

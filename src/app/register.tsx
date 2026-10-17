@@ -48,7 +48,8 @@ export default function RegisterScreen() {
   // 3. Función al enviar el formulario con éxito
   const handleRegister = (data: RegisterFormData) => {
     // Guardamos la sesión directamente en el Contexto Global (sin AsyncStorage)
-    login(data.email);
+    const tokenDelServidor = "jwt_token_generado_por_el_backend_123";
+    login(data.email, tokenDelServidor);
     alert(`¡Registro exitoso! Bienvenido, ${data.nombre}`);
     router.replace("/(tabs)/perfil");
   };

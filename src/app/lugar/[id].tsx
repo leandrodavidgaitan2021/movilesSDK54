@@ -12,10 +12,12 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Alert
 } from "react-native";
 
 
 import { useTheme } from "../../hooks/useTheme";
+import { useAuth } from "../../hooks/useAuth";
 import { cambiarFavorito, esFavorito } from "../../servicios/favoritos";
 import { obtenerLugares } from "../../servicios/lugares";
 import { Lugar } from "../../tipos";
@@ -28,6 +30,7 @@ const { width: ANCHO_PANTALLA } = Dimensions.get("window");
 export default function DetalleLugarScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { user } = useAuth();
   const { colors, theme } = useTheme();
 
   const [lugar, setLugar] = useState<Lugar | null>(null);
@@ -55,17 +58,31 @@ export default function DetalleLugarScreen() {
 
   useEffect(() => {
     async function verificarFavorito() {
-      if (typeof id === "string") {
-        const favorito = await esFavorito(id);
+      if (typeof id === "string" && user) {
+        const favorito = await esFavorito(user, id);
         setEsFav(favorito);
+      } else {
+        setEsFav(false);
       }
     }
     verificarFavorito();
-  }, [id]);
+  }, [id, user]);
 
   async function cambiarEstrella() {
+    if (!user) {
+      Alert.alert (
+        "Iniciá sesión para guardar en favoritos",
+        "Podés ver todos los lugares sin cuenta. La cuenta sirve para guardar tus favoritos y tu recorrido.", 
+        [
+          { text: "Ahora no", style: "cancel"},
+          { text: "Iniciar sesión", onPress: () => router.push({ pathname: "/login", params: { redirect: `/lugar/${id}`} })},
+        ],
+      );
+      return;
+    }
+
     if (typeof id === "string") {
-      const nuevoEstado = await cambiarFavorito(id);
+      const nuevoEstado = await cambiarFavorito(user, id);
       setEsFav(nuevoEstado);
     }
   }
