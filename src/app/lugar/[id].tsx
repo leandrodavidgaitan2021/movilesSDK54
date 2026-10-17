@@ -7,6 +7,7 @@ import {
   Dimensions,
   Image,
   Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,7 +15,6 @@ import {
   View,
   Alert
 } from "react-native";
-
 
 import { useTheme } from "../../hooks/useTheme";
 import { useAuth } from "../../hooks/useAuth";
@@ -25,7 +25,6 @@ import { agruparHorarios } from "../../utils/horarios";
 
 // Obtenemos el ancho exacto de la pantalla actual
 const { width: ANCHO_PANTALLA } = Dimensions.get("window");
-
 
 export default function DetalleLugarScreen() {
   const { id } = useLocalSearchParams();
@@ -87,6 +86,40 @@ export default function DetalleLugarScreen() {
     }
   }
 
+  // Función para abrir Google Maps indicando origen y destino
+  function abrirGoogleMaps() {
+    if (!lugar || !lugar.coordenadas) return;
+
+    const { latitud: latDestino, longitud: lonDestino } = lugar.coordenadas;
+    
+    // Si tienes guardada la ubicación actual (puedes reemplazar estas variables por las reales de tu estado o contexto)
+    // Por defecto usaremos el centro de Colón o una coordenada simulada si la tienes accesible.
+    const latOrigen = -32.21568; // Reemplaza por tu latitud actual/simulada
+    const lonOrigen = -58.13649; // Reemplaza por tu longitud actual/simulada
+
+    const etiquetaDestino = encodeURIComponent(lugar.nombre);
+
+    // URL universal que soporta origen (saddr) y destino (daddr) para trazar ruta
+    const url = Platform.select({
+      ios: `maps://app?saddr=${latOrigen},${lonOrigen}&daddr=${latDestino},${lonDestino}`,
+      android: `https://www.google.com/maps/dir/?api=1&origin=${latOrigen},${lonOrigen}&destination=${latDestino},${lonDestino}&travelmode=driving`,
+    });
+
+    const urlWeb = `https://www.google.com/maps/dir/?api=1&origin=${latOrigen},${lonOrigen}&destination=${latDestino},${lonDestino}`;
+
+    Linking.canOpenURL(url!)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(url!);
+        } else {
+          Linking.openURL(urlWeb);
+        }
+      })
+      .catch(() => {
+        Linking.openURL(urlWeb);
+      });
+  }
+
   if (cargando) {
     return (
       <View style={[styles.centrado, { backgroundColor: colors.background }]}>
@@ -120,13 +153,12 @@ export default function DetalleLugarScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       bounces={false}
     >
-    {/* Sección de Imágenes / Carrusel visual adaptativo a Dark/Light */}
+      {/* Sección de Imágenes / Carrusel visual adaptativo a Dark/Light */}
       <View
         style={[
           styles.imagenContainer,
           {
-            backgroundColor:
-              theme === "dark" ? colors.card : "#f0f0f0", // Fondo adaptativo
+            backgroundColor: theme === "dark" ? colors.card : "#f0f0f0",
           },
         ]}
       >
@@ -144,7 +176,7 @@ export default function DetalleLugarScreen() {
               />
             ))}
           </ScrollView>
-) : (
+        ) : (
           <View
             style={[
               styles.imagenPlaceholder,
@@ -160,7 +192,7 @@ export default function DetalleLugarScreen() {
             />
             <Text
               style={[
-                styles.imagenPlaceholderText, // <-- Usamos el estilo correcto para textos
+                styles.imagenPlaceholderText,
                 { color: colors.textSecondary },
               ]}
             >
@@ -222,6 +254,24 @@ export default function DetalleLugarScreen() {
             {lugar.direccion}
           </Text>
         </View>
+
+        {/* Botón de Cómo llegar / Google Maps */}
+        <TouchableOpacity
+          style={[
+            styles.mapButton,
+            {
+              backgroundColor: theme === "dark" ? colors.card : "#e8f4fd",
+              borderColor: colors.border,
+              borderWidth: theme === "dark" ? 1 : 0,
+            },
+          ]}
+          onPress={abrirGoogleMaps}
+        >
+          <Ionicons name="navigate-outline" size={18} color="#2980b9" />
+          <Text style={[styles.mapButtonText, { color: "#2980b9" }]}>
+            Cómo llegar (Abrir en Google Maps)
+          </Text>
+        </TouchableOpacity>
 
         {/* Información adicional: Precio, Accesibilidad */}
         <View style={styles.infoRow}>
@@ -366,15 +416,15 @@ const styles = StyleSheet.create({
   },
   textoCargando: { marginTop: 10, fontSize: 16 },
   errorText: { fontSize: 16, marginTop: 10, marginBottom: 20 },
-  imagenContainer: { 
-    width: ANCHO_PANTALLA, 
-    height: 200, 
-    backgroundColor: "#f0f0f0" 
+  imagenContainer: {
+    width: ANCHO_PANTALLA,
+    height: 200,
+    backgroundColor: "#f0f0f0",
   },
-  imagenLugar: { 
-    width: ANCHO_PANTALLA, // Ocupa exactamente el ancho de la pantalla
-    height: 200, 
-    resizeMode: "cover" 
+  imagenLugar: {
+    width: ANCHO_PANTALLA,
+    height: 200,
+    resizeMode: "cover",
   },
   imagenPlaceholder: {
     width: ANCHO_PANTALLA,
@@ -383,9 +433,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#ecf0f1",
   },
-  imagenPlaceholderText: { 
-    fontSize: 13, 
-    marginTop: 4 
+  imagenPlaceholderText: {
+    fontSize: 13,
+    marginTop: 4,
   },
   floatingBackButton: {
     position: "absolute",
@@ -423,6 +473,20 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   coordenadasText: { fontSize: 12, marginLeft: 4 },
+  mapButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 8,
+    marginBottom: 14,
+  },
+  mapButtonText: {
+    fontSize: 13,
+    fontWeight: "bold",
+  },
   section: { marginBottom: 14 },
   sectionTitle: {
     fontSize: 15,

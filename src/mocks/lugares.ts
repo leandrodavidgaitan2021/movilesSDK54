@@ -75,7 +75,7 @@ export const LUGARES_MOCK: Lugar[] = [
     descripcionCorta: "Hermosa playa de arena sobre la costa de Colón.",
     descripcion:
       "Balneario muy concurrido durante la temporada de verano, con paradores, alquiler de sombrillas y bajada náutica.",
-    coordenadas: { latitud: -32.2112, longitud: -58.1345 },
+    coordenadas: { latitud: -32.2110251, longitud: -58.1422595 },
     direccion: "Costanera Norte",
     imagenes: [],
     horarios: [
@@ -183,6 +183,35 @@ export const LUGARES_MOCK: Lugar[] = [
     precioEntrada: 3000,
     audioguia: null,
     codigoQr: "COLON:lug-005",
+    accesible: true,
+    activo: true,
+    actualizadoEn: "2026-08-15T16:00:00-03:00",
+  },
+  {
+    id: "lug-006",
+    nombre: "Secretaria de turismo ciudad de Colon",
+    categoriaId: "cat-naturaleza",
+    descripcionCorta: "Secretaria de turismo ciudad de Colon, datos de lugares.",
+    descripcion:
+      "Buen asesoramiento y mucha gentileza en la atención. Hermoso edificio histórico de Colón.",
+    coordenadas: { latitud: -32.21568, longitud: -58.13649 },
+    direccion: "Gouchon 20, E3280 Colón, Entre Ríos ",
+    imagenes: [
+          ],
+    // Ejemplo: De martes a domingo con mismo horario, lunes cerrado (no figura)
+    horarios: [
+      { dia: 2, abre: "08:00", cierra: "20:00" },
+      { dia: 3, abre: "08:00", cierra: "20:00" },
+      { dia: 4, abre: "08:00", cierra: "20:00" },
+      { dia: 5, abre: "08:00", cierra: "20:00" },
+      { dia: 6, abre: "08:00", cierra: "20:00" },
+      { dia: 0, abre: "08:00", cierra: "20:00" },
+    ],
+    telefono: "03447643018",
+    sitioWeb: "https://www.colonturismo.tur.ar/",
+    precioEntrada: 0,
+    audioguia: null,
+    codigoQr: "COLON:lug-006",
     accesible: true,
     activo: true,
     actualizadoEn: "2026-08-15T16:00:00-03:00",
