@@ -75,7 +75,7 @@ export default function DetalleLugarScreen() {
         "Podés ver todos los lugares sin cuenta. La cuenta sirve para guardar tus favoritos y tu recorrido.", 
         [
           { text: "Ahora no", style: "cancel"},
-          { text: "Iniciar sesión", onPress: () => router.push("/login") },
+          { text: "Iniciar sesión", onPress: () => router.push({ pathname: "/login", params: { redirect: `/lugar/${id}`} })},
         ],
       );
       return;

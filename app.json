@@ -55,7 +55,8 @@
         {
           "locationPermission": "Permite acceder a tu ubicación para calcular la distancia a los lugares turísticos de Colón."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
