@@ -1,29 +1,43 @@
 // src/servicios/lugares.ts
+import { api } from "./api"; // Importamos la instancia centralizada que ya creaste
 import { Lugar, Categoria } from "../tipos";
-import { LUGARES_MOCK, CATEGORIAS_MOCK } from "../mocks/lugares";
 
-// Simula un delay de red y estructuración de la respuesta de la API
-export async function obtenerLugares(): Promise<{ datos: Lugar[]; meta: { total: number; pagina: number; porPagina: number } }> {
-  // Simulamos latencia de red
-  await new Promise((resolve) => setTimeout(resolve, 300));
-
-  return {
-    datos: LUGARES_MOCK,
-    meta: {
-      total: LUGARES_MOCK.length,
-      pagina: 1,
-      porPagina: 20
-    }
-  };
+// Obtiene todos los lugares desde la API real de NestJS
+export async function obtenerLugares(): Promise<{
+  datos: Lugar[];
+  meta: { total: number; pagina: number; porPagina: number };
+}> {
+  try {
+    // Solicitamos con porPagina: 500 para cargar el catálogo entero como requiere la app
+    const response = await api.get("/lugares", {
+      params: { porPagina: 500 },
+    });
+    
+    return response.data; // Retorna { datos, meta } tal cual lo envía NestJS
+  } catch (error) {
+    console.error("Error al obtener lugares del servidor:", error);
+    throw error;
+  }
 }
 
+// Obtiene las categorías desde la API real de NestJS
 export async function obtenerCategorias(): Promise<Categoria[]> {
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  return CATEGORIAS_MOCK;
+  try {
+    const response = await api.get("/categorias");
+    return response.data.datos || response.data;
+  } catch (error) {
+    console.error("Error al obtener categorías del servidor:", error);
+    throw error;
+  }
 }
 
+// Obtiene un lugar específico por su ID desde la API
 export async function obtenerLugarPorId(id: string): Promise<Lugar | null> {
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  const lugar = LUGARES_MOCK.find((l) => l.id === id);
-  return lugar || null;
+  try {
+    const response = await api.get(`/lugares/${id}`);
+    return response.data.datos || response.data;
+  } catch (error) {
+    console.error(`Error al obtener el lugar con ID ${id}:`, error);
+    return null;
+  }
 }

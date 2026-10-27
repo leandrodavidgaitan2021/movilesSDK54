@@ -2,11 +2,12 @@
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Lugar } from "../tipos";
+import { Lugar, Categoria } from "../tipos";
 import PanelFiltros from "./PanelFiltros";
 
 interface Props {
   lugaresFiltrados: Lugar[];
+  categorias: Categoria[];
   ubicacionActual: { latitud: number; longitud: number };
   colors: any;
   theme: string;
@@ -22,6 +23,7 @@ interface Props {
 
 export default function ListaLugares({
   lugaresFiltrados,
+  categorias,
   ubicacionActual,
   colors,
   theme,
@@ -36,7 +38,6 @@ export default function ListaLugares({
 }: Props) {
   const router = useRouter();
 
-  // Filtramos la lista para excluir el lugar donde estás actualmente (distancia 0 o menor a 1 metro)
   const lugaresParaMostrar = lugaresFiltrados.filter((item) => {
     const metros = calcularDistancia(
       ubicacionActual.latitud,
@@ -44,17 +45,29 @@ export default function ListaLugares({
       item.coordenadas.latitud,
       item.coordenadas.longitud
     );
-    return metros > 1; // Si la distancia es mayor a 1 metro, se muestra en la lista
+    return metros > 1; 
   });
+
+  const obtenerTituloCabecera = () => {
+    if (busquedaTexto.trim() !== "") {
+      return `Resultados para "${busquedaTexto}" (${lugaresParaMostrar.length})`;
+    }
+    if (categoriaSeleccionada === "Todos") {
+      return `Todos (${lugaresParaMostrar.length})`;
+    }
+    const categoriaEncontrada = categorias.find((c) => c.id === categoriaSeleccionada);
+    return `${categoriaEncontrada ? categoriaEncontrada.nombre : "Filtrados"} (${lugaresParaMostrar.length})`;
+  };
 
   return (
     <View style={styles.cercaContainer}>
       <View style={styles.listHeaderRow}>
         <Text style={[styles.cercaTitle, { color: colors.text }]}>
-          Lugares cercanos ({lugaresParaMostrar.length})
+          {obtenerTituloCabecera()}
         </Text>
 
         <View style={styles.accionesFiltroRow}>
+          {/* Botón para abrir el Modal de Filtros */}
           <TouchableOpacity
             style={[
               styles.botonAccionFiltro,
@@ -63,19 +76,18 @@ export default function ListaLugares({
                 borderColor: theme === "dark" ? "#275c3e" : "#c6e7d6",
               },
             ]}
-            onPress={() => setMostrarFiltrosExtra(!mostrarFiltrosExtra)}
+            onPress={() => setMostrarFiltrosExtra(true)}
           >
             <Ionicons name="funnel-outline" size={13} color={colors.primary} />
             <Text style={[styles.botonAccionText, { color: colors.primary }]}>
-              {categoriaSeleccionada === "Todos" ? "Filtrar" : categoriaSeleccionada}
+              {categoriaSeleccionada === "Todos"
+                ? "Filtrar"
+                : categorias.find((c) => c.id === categoriaSeleccionada)?.nombre || "Filtrar"}
             </Text>
-            <Ionicons
-              name={mostrarFiltrosExtra ? "chevron-up" : "chevron-down"}
-              size={12}
-              color={colors.primary}
-            />
+            <Ionicons name="chevron-down" size={12} color={colors.primary} />
           </TouchableOpacity>
 
+          {/* Botón Limpiar (aparece solo si hay filtro o búsqueda activa) */}
           {(busquedaTexto !== "" || categoriaSeleccionada !== "Todos") && (
             <TouchableOpacity
               style={[
@@ -96,15 +108,31 @@ export default function ListaLugares({
         </View>
       </View>
 
+      {/* Modal que envuelve a PanelFiltros para que se abra flotando */}
       {mostrarFiltrosExtra && (
-        <PanelFiltros
-          colors={colors}
-          theme={theme}
-          busquedaTexto={busquedaTexto}
-          setBusquedaTexto={setBusquedaTexto}
-          categoriaSeleccionada={categoriaSeleccionada}
-          seleccionarCategoria={seleccionarCategoria}
-        />
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Filtrar lugares</Text>
+              <TouchableOpacity onPress={() => setMostrarFiltrosExtra(false)}>
+                <Ionicons name="close" size={20} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <PanelFiltros
+              colors={colors}
+              theme={theme}
+              busquedaTexto={busquedaTexto}
+              setBusquedaTexto={setBusquedaTexto}
+              categoriaSeleccionada={categoriaSeleccionada}
+              seleccionarCategoria={(cat) => {
+                seleccionarCategoria(cat);
+                setMostrarFiltrosExtra(false); // Opcional: cierra el modal al seleccionar una categoría
+              }}
+              categorias={categorias}
+            />
+          </View>
+        </View>
       )}
 
       <FlatList
@@ -186,6 +214,36 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   botonLimpiarText: { fontSize: 11, fontWeight: "600" },
+  modalOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 99,
+    padding: 20,
+  },
+  modalContent: {
+    width: "100%",
+    padding: 15,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  modalTitle: { fontSize: 15, fontWeight: "bold" },
   lugarItem: {
     flexDirection: "row",
     justifyContent: "space-between",

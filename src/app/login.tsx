@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Controller, useForm } from "react-hook-form";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -14,8 +15,9 @@ import {
 } from "react-native";
 import * as z from "zod";
 import { useAuth } from "../hooks/useAuth";
-import { useTheme } from "../hooks/useTheme"; // <-- Mantenemos el hook de tema para los colores automáticos
+import { useTheme } from "../hooks/useTheme";
 import { useLoginBiometrico } from "../hooks/useLoginBiometrico";
+import { apiIngresar } from "../servicios/auth"; // <-- Importamos tu servicio de Axios
 
 const loginSchema = z.object({
   email: z
@@ -25,24 +27,21 @@ const loginSchema = z.object({
   password: z
     .string()
     .min(8, "La contraseña debe tener al menos 8 caracteres")
-    .regex(/[A-Z]/, "Debe contener al menos una letra mayúscula")
+//    .regex(/[A-Z]/, "Debe contener al menos una letra mayúscula")
     .regex(/[0-9]/, "Debe contener al menos un número"),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginScreen() {
-  const emailMock = "turista@colon.com";
-  const passwordMock = "12345678A";
-
   const router = useRouter();
-  const { redirect } = useLocalSearchParams<{ redirect?: string }>(); // <-- Capturamos la ruta de origen si existe
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
   const { login } = useAuth();
-  const { colors } = useTheme(); // <-- Solo extraemos los colores según el tema actual o del dispositivo
-  const { disponible: hayBiometria, entrar: entrarConBiometroia } = useLoginBiometrico();
+  const { colors } = useTheme();
+  const { disponible: hayBiometria, entrar: entrarConBiometria } = useLoginBiometrico();
 
   const handleLoginBiometrico = async () => {
-    const exito = await entrarConBiometroia();
+    const exito = await entrarConBiometria();
     if (!exito) return;
     if (redirect) {
       router.replace(redirect as any);
@@ -63,49 +62,28 @@ export default function LoginScreen() {
     },
   });
 
-  /*
   const handleLogin = async (data: LoginFormData) => {
-  try {
-    // 1. Hacemos el POST al backend con email y contraseña
-    const response = await fetch("https://tu-api-colon.com/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: data.email, password: data.password }),
-    });
-    
-    const resultado = await response.json();
+    try {
+      const respuesta = await apiIngresar({
+        email: data.email,
+        contrasena: data.password,
+      });
 
-    if (response.ok) {
-      // 2. El backend nos responde con el token. Recién aquí lo guardamos en el contexto
-      await login(resultado.userEmail, resultado.token);
-      router.replace("/(tabs)/perfil");
-    } else {
-      alert("Credenciales inválidas");
-    }
-  } catch (error) {
-    console.error("Error de red", error);
-  }
-}; 
-*/
+      // Guardamos el email del objeto usuario y el token recibido
+      await login(respuesta.usuario.email, respuesta.token);
 
-const handleLogin = async (data: LoginFormData) => {
-    if (data.email === emailMock && data.password === passwordMock) {
-      // 1. Simulamos que llamamos al backend y este nos responde con un token de acceso
-      const tokenDelServidor = "jwt_token_generado_por_el_backend_123";
-
-      // 2. Guardamos ambos valores en el contexto en memoria
-      await login(data.email, tokenDelServidor);
-
-      // Si nos pasaron una ruta de redirección, volvemos a ella; si no, vamos a perfil o tabs
       if (redirect) {
         router.replace(redirect as any);
       } else {
         router.replace("/(tabs)/perfil");
       }
-    } else {
-      alert(
-        "Credenciales incorrectas. Prueba con turista@colon.com y 12345678A",
-      );
+    } catch (error: any) {
+      console.error("Error al iniciar sesión:", error);
+      const mensajeError =
+        error.response?.status === 401
+          ? "Credenciales incorrectas."
+          : "No se pudo conectar con el servidor. Verifica tu conexión.";
+      Alert.alert("Error de acceso", mensajeError);
     }
   };
 
@@ -200,7 +178,7 @@ const handleLogin = async (data: LoginFormData) => {
             <Text style={[styles.biometriaButtonText, { color: colors.primary}]}>
               Entrar con huella o rostro
             </Text>
-            </TouchableOpacity>
+          </TouchableOpacity>
         )}
 
         <TouchableOpacity
@@ -226,7 +204,6 @@ const handleLogin = async (data: LoginFormData) => {
     </KeyboardAvoidingView>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -293,14 +270,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   biometriaButton: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 8,
-  paddingVertical: 14,
-  borderRadius: 10,
-  borderWidth: 1,
-  marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 10,
   },
   biometriaButtonText: { fontSize: 16, fontWeight: "bold" },
 });

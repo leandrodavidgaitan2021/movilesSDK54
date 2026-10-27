@@ -36,7 +36,7 @@ export default function MapaLugares({ ubicacionActual, lugares }: Props) {
       id: "tu-ubicacion",
       nombre: "Estás aquí",
       subtitulo: null,
-      descripcionCorta: "Posición actual o simulada",
+      descripcionCorta: "Posición actual",
       esUbicacionActual: true,
     };
   };

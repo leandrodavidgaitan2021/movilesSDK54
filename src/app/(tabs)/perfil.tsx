@@ -9,13 +9,13 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import AccesoRestringido from "../../components/AccesoRestringido";
-import { useAuth } from "../../hooks/useAuth"; // <-- Importamos el hook de autenticación global
-import { useTheme } from "../../hooks/useTheme"; // <-- Importamos el hook del tema global
+import { useAuth } from "../../hooks/useAuth";
+import { useTheme } from "../../hooks/useTheme";
 
 export default function PerfilScreen() {
   const router = useRouter();
   const { colors, theme } = useTheme();
-  const { user, isAuthenticated, cargando, logout } = useAuth(); // <-- Consumimos el contexto global
+  const { user, cargando, logout } = useAuth();
 
   if (cargando) {
     return (
@@ -25,7 +25,7 @@ export default function PerfilScreen() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!user) {
     return (
       <AccesoRestringido subtitulo="Inicia sesión para ver tu perfil, preferencias y lugares guardados offline." />
     );
@@ -76,70 +76,67 @@ export default function PerfilScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
+  container: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    padding: 20 
   },
-  containerLogeado: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
+  containerLogeado: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    padding: 20 
   },
-  title: {
-    fontSize: 22,
+  title: { 
+    fontSize: 22, 
     fontWeight: "bold",
-    marginTop: 15,
-    textAlign: "center",
+    marginTop: 15, 
+    textAlign: "center" 
   },
-  emailText: {
-    fontSize: 15,
-    marginBottom: 20,
+  emailText: { 
+    fontSize: 15, 
+    marginBottom: 20 
   },
   card: {
-    width: "100%",
-    padding: 16,
-    borderRadius: 10,
-    marginBottom: 25,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
+    width: "100%", 
+    padding: 16, 
+    borderRadius: 10, 
+    marginBottom: 25, 
+    elevation: 2 
   },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 5,
+  cardTitle: { 
+    fontSize: 16, 
+    fontWeight: "bold", 
+    marginBottom: 5 
   },
-  cardDesc: {
-    fontSize: 13,
+  cardDesc: { 
+    fontSize: 13 
   },
-  favoritosButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#e8f8f0",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginBottom: 12,
+  favoritosButton: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 6, 
+    backgroundColor: "#e8f8f0", 
+    paddingVertical: 12, 
+    paddingHorizontal: 20, 
+    borderRadius: 8, 
+    marginBottom: 12 
   },
   favoritosButtonText: { 
     color: "#27ae60", 
     fontWeight: "bold", 
     fontSize: 14 
   },
-  logoutButton: {
-    backgroundColor: "#e74c3c",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
+  logoutButton: { 
+    backgroundColor: "#e74c3c", 
+    paddingVertical: 12, 
+    paddingHorizontal: 24, 
+    borderRadius: 8 
   },
-  logoutText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 14,
+  logoutText: { 
+    color: "#fff", 
+    fontWeight: "bold", 
+    fontSize: 14 
   },
 });

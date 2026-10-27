@@ -69,7 +69,7 @@ export default function SimuladorUbicacion({
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.chip}
-          onPress={() => onCambiarCoordenadas(-32.215, -58.13)}
+          onPress={() => onCambiarCoordenadas(-32.2135, -58.1455)}
         >
           <Text style={styles.chipText}>Costanera</Text>
         </TouchableOpacity>

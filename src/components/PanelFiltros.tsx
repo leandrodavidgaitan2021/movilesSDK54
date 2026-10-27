@@ -1,8 +1,8 @@
 // src/components/PanelFiltros.tsx
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { Categoria } from "../tipos";
 
-// 1. Agregamos todas las propiedades a la interfaz Props
 interface Props {
   colors: any;
   theme: string;
@@ -10,6 +10,7 @@ interface Props {
   setBusquedaTexto: (texto: string) => void;
   categoriaSeleccionada: string;
   seleccionarCategoria: (cat: string) => void;
+  categorias: Categoria[];
 }
 
 export default function PanelFiltros({
@@ -19,6 +20,7 @@ export default function PanelFiltros({
   setBusquedaTexto,
   categoriaSeleccionada,
   seleccionarCategoria,
+  categorias,
 }: Props) {
   return (
     <View
@@ -49,34 +51,66 @@ export default function PanelFiltros({
       </View>
 
       <View style={styles.categoriasPildoras}>
-        {["Todos", "Playas", "Alojamientos", "Gastronomia"].map((cat) => (
-          <TouchableOpacity
-            key={cat}
+        {/* Opción "Todos" */}
+        <TouchableOpacity
+          key="Todos"
+          style={[
+            styles.pildora,
+            {
+              backgroundColor:
+                categoriaSeleccionada === "Todos"
+                  ? colors.primary
+                  : theme === "dark"
+                  ? "#333"
+                  : "#eee",
+            },
+          ]}
+          onPress={() => seleccionarCategoria("Todos")}
+        >
+          <Text
             style={[
-              styles.pildora,
+              styles.pildoraTexto,
               {
-                backgroundColor:
-                  categoriaSeleccionada === cat
+                color: categoriaSeleccionada === "Todos" ? "#fff" : colors.text,
+              },
+            ]}
+          >
+            Todos
+          </Text>
+        </TouchableOpacity>
+
+        {/* Mapeamos usando cat.id para que coincida con lugar.categoriaId */}
+        {categorias.map((cat) => {
+          const seleccionada = categoriaSeleccionada === cat.id;
+
+          return (
+            <TouchableOpacity
+              key={cat.id}
+              style={[
+                styles.pildora,
+                {
+                  backgroundColor: seleccionada
                     ? colors.primary
                     : theme === "dark"
                     ? "#333"
                     : "#eee",
-              },
-            ]}
-            onPress={() => seleccionarCategoria(cat)}
-          >
-            <Text
-              style={[
-                styles.pildoraTexto,
-                {
-                  color: categoriaSeleccionada === cat ? "#fff" : colors.text,
                 },
               ]}
+              onPress={() => seleccionarCategoria(cat.id)} // Pasamos el ID exacto (ej: "cat-playas")
             >
-              {cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                style={[
+                  styles.pildoraTexto,
+                  {
+                    color: seleccionada ? "#fff" : colors.text,
+                  },
+                ]}
+              >
+                {cat.nombre} {/* Mostramos el nombre legible al usuario */}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </View>
   );
@@ -97,8 +131,22 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     height: 36,
   },
-  searchInput: { flex: 1, fontSize: 13 },
-  categoriasPildoras: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  pildora: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12 },
-  pildoraTexto: { fontSize: 11, fontWeight: "500" },
+  searchInput: { 
+    flex: 1, 
+    fontSize: 13 
+  },
+  categoriasPildoras: { 
+    flexDirection: "row", 
+    flexWrap: "wrap", 
+    gap: 6 
+  },
+  pildora: { 
+    paddingVertical: 4, 
+    paddingHorizontal: 10, 
+    borderRadius: 12 
+  },
+  pildoraTexto: { 
+    fontSize: 11, 
+    fontWeight: "500" 
+  },
 });

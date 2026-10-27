@@ -1,3 +1,4 @@
+// src/hooks/useLoginBiometrico.ts
 import { useEffect, useState } from "react";
 import { biometriaDisponible, pedirBiometria } from "../servicios/biometria";
 import { leerSesion } from "../servicios/sesion";

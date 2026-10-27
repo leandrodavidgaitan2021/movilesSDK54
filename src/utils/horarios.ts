@@ -21,52 +21,88 @@ export interface HorarioAgrupado {
   hora: string;
 }
 
-function formatearRangoDias(diaInicio: number, diaFin: number): string {
-  // Si abarca toda la semana (de Domingo 0 a Sábado 6)
-  if (diaInicio === 0 && diaFin === 6) {
-    return "Todos los días";
-  }
-
-  if (diaInicio === diaFin) {
-    return DIAS_SEMANA[diaInicio];
-  }
-  if (diaFin === diaInicio + 1) {
-    return `${DIAS_SEMANA[diaInicio]} y ${DIAS_SEMANA[diaFin]}`;
-  }
-  return `${DIAS_SEMANA[diaInicio]} a ${DIAS_SEMANA[diaFin]}`;
-}
-
 export function agruparHorarios(horarios: HorarioItem[]): HorarioAgrupado[] {
-  if (!horarios || horarios.length === 0) return [];
+  if (!horarios || horarios.length === 0) {
+    return [{ textoDias: "Todos los días", hora: "Cerrado" }];
+  }
 
-  const ordenados = [...horarios].sort((a, b) => a.dia - b.dia);
+  // 1. Mapeamos los 7 días de la semana (0 a 6)
+  const mapaDias: { [dia: number]: string[] } = {};
+  for (let d = 0; d <= 6; d++) {
+    mapaDias[d] = [];
+  }
+
+  horarios.forEach((h) => {
+    const rangoStr = `${h.abre} a ${h.cierra} hs`;
+    if (mapaDias[h.dia]) {
+      mapaDias[h.dia].push(rangoStr);
+    }
+  });
+
+  // Definimos explícitamente la interfaz o tipo para el array
+  interface DiaProcesado {
+    dia: number;
+    horasTexto: string;
+  }
+
+  const diasProcesados: DiaProcesado[] = [];
+  for (let d = 0; d <= 6; d++) {
+    const turnos = mapaDias[d];
+    let horasTexto = "Cerrado";
+    if (turnos.length > 0) {
+      horasTexto = turnos.join(" y ");
+    }
+    diasProcesados.push({ dia: d, horasTexto });
+  }
+
+  // 2. Reordenamos el array para que empiece desde el Lunes (1) hasta el Domingo (0)
+  const ordenLogico = [1, 2, 3, 4, 5, 6, 0];
+  const diasOrdenados: DiaProcesado[] = ordenLogico.map(
+    (d) => diasProcesados.find((item) => item.dia === d)!
+  );
+
+  // 3. Agrupamos días consecutivos que comparten exactamente los mismos horarios
   const agrupados: HorarioAgrupado[] = [];
+  let inicioGrupo = diasOrdenados[0].dia;
+  let finGrupo = diasOrdenados[0].dia;
+  let horaActual = diasOrdenados[0].horasTexto;
 
-  let inicioGrupo = ordenados[0];
-  let finGrupo = ordenados[0];
-  let horaActual = `${ordenados[0].abre} a ${ordenados[0].cierra} hs`;
+  const esDiaSiguiente = (diaAnterior: number, diaSiguiente: number) => {
+    if (diaAnterior === 6 && diaSiguiente === 0) return true; // Sábado -> Domingo
+    return diaSiguiente === diaAnterior + 1;
+  };
 
-  for (let i = 1; i < ordenados.length; i++) {
-    const actual = ordenados[i];
-    const horaActualStr = `${actual.abre} a ${actual.cierra} hs`;
+  for (let i = 1; i < diasOrdenados.length; i++) {
+    const actual = diasOrdenados[i];
 
-    if (actual.dia === finGrupo.dia + 1 && horaActualStr === horaActual) {
-      finGrupo = actual;
+    if (actual.horasTexto === horaActual && esDiaSiguiente(finGrupo, actual.dia)) {
+      finGrupo = actual.dia;
     } else {
       agrupados.push({
-        textoDias: formatearRangoDias(inicioGrupo.dia, finGrupo.dia),
+        textoDias: formatearRangoDiasSecuencia(inicioGrupo, finGrupo),
         hora: horaActual,
       });
-      inicioGrupo = actual;
-      finGrupo = actual;
-      horaActual = horaActualStr;
+      inicioGrupo = actual.dia;
+      finGrupo = actual.dia;
+      horaActual = actual.horasTexto;
     }
   }
 
+  // Añadir el último grupo pendiente
   agrupados.push({
-    textoDias: formatearRangoDias(inicioGrupo.dia, finGrupo.dia),
+    textoDias: formatearRangoDiasSecuencia(inicioGrupo, finGrupo),
     hora: horaActual,
   });
 
   return agrupados;
+}
+
+function formatearRangoDiasSecuencia(inicio: number, fin: number): string {
+  if (inicio === 1 && fin === 0) {
+    return "Todos los días";
+  }
+  if (inicio === fin) {
+    return DIAS_SEMANA[inicio];
+  }
+  return `${DIAS_SEMANA[inicio]} a ${DIAS_SEMANA[fin]}`;
 }
