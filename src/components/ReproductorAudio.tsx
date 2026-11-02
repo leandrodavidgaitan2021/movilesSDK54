@@ -22,17 +22,17 @@ export default function ReproductorAudio({ audioguia, colors }: Props) {
     : `${apiBaseUrl}${audioguia.url.startsWith("/") ? "" : "/"}${audioguia.url}`;
 
   // Pasamos la URL como objeto { uri } y configuramos el updateInterval
-  /*
+
   const player = useAudioPlayer({ uri: audioUrl }, {
     downloadFirst: true,
     updateInterval: 500, // Actualiza el estado cada medio segundo
   });
-*/
+  /*
 const player = useAudioPlayer({ uri: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" }, {
   downloadFirst: true,
   updateInterval: 500,
 });
-
+*/
   const status = useAudioPlayerStatus(player);
 
   const estaReproduciendo = status.playing;

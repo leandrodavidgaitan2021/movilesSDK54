@@ -17,7 +17,7 @@ import {
 import { useTheme } from "../../hooks/useTheme";
 import { useAuth } from "../../hooks/useAuth";
 import { cambiarFavorito, esFavorito } from "../../servicios/favoritos";
-import { api } from "../../servicios/api";
+import { obtenerLugarPorId } from "../../servicios/lugares";
 import { Lugar } from "../../tipos";
 
 // Componentes modularizados
@@ -39,11 +39,11 @@ export default function DetalleLugarScreen() {
   useEffect(() => {
     async function cargarDetalle() {
       try {
-        const response = await api.get(`/lugares/${id}`);
-        const lugarData = response.data.datos || response.data;
-        
-        if (lugarData) {
-          setLugar(lugarData);
+        if (typeof id === "string") {
+          const lugarData = await obtenerLugarPorId(id);
+          if (lugarData) {
+            setLugar(lugarData);
+          }
         }
       } catch (error) {
         console.error("Error al cargar el detalle del lugar:", error);

@@ -65,7 +65,8 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,
