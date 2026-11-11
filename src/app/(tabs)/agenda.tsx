@@ -1,7 +1,8 @@
-// src/app/(tabs)/agenda.tsx
+ import React, { useState, useEffect } from "react"// src/app/(tabs)/agenda.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../../hooks/useTheme";
+import axios from 'axios';
 
 const EVENTOS_COLON = [
   {
@@ -62,6 +63,20 @@ const EVENTOS_COLON = [
 
 export default function AgendaScreen() {
   const { colors, theme } = useTheme();
+  const [eventos, setEventos] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    axios.get("http://192.168.100.6:3000/eventos")
+      .then((res) => {
+        setEventos(res.data);
+        setCargando(false);
+      })
+      .catch((error) => {
+        console.error(error);
+        setCargando(false);
+      });
+  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -77,7 +92,7 @@ export default function AgendaScreen() {
 
       {/* Lista de Eventos */}
       <FlatList
-        data={EVENTOS_COLON}
+        data={eventos}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 20 }}
