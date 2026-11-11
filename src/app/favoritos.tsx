@@ -10,6 +10,7 @@ import {
     View,
 } from "react-native";
 
+import AccesoRestringido from "../components/AccesoRestringido";
 import { obtenerLugaresFav } from "../servicios/favoritos";
 import { Lugar } from "../tipos";
 import { useTheme } from "../hooks/useTheme";
@@ -22,61 +23,85 @@ export default function PantallaFavoritos() {
     const [lugares, setLugares] = useState<Lugar[]>([]);
     const [cargando, setCargando] = useState<boolean>(true);
 
-
     useFocusEffect(
         useCallback(() => {
             async function cargarFavoritos() {
-                if (user) {
-                    setLugares(await obtenerLugaresFav(user));
-                } else {
+                try {
+                    setLugares(user ? await obtenerLugaresFav(user) : []);
+                } catch (error) {
+                    console.error("No se pudieron cargar los favoritos", error);
                     setLugares([]);
+                } finally {
+                    setCargando(false);
                 }
-                setCargando(false);
             }
             cargarFavoritos();
         }, [user]),
     );
 
+    // Un invitado no tiene favoritos: se le pide iniciar sesión
+    if (!user) {
+        return (
+            <AccesoRestringido subtitulo="Iniciá sesión para guardar tus lugares favoritos." />
+        );
+    }
+
     if (cargando) {
         return (
-            <View style = {[styles.centrado, { backgroundColor: colors.background}]}>
-                <ActivityIndicator size = "large" color = {colors.primary}/>
+            <View style={[styles.centrado, { backgroundColor: colors.background }]}>
+                <ActivityIndicator size="large" color={colors.primary} />
             </View>
-            );
-        }
+        );
+    }
 
     return (
-        <View style={[styles.container, {backgroundColor: colors.background}]}>
-            <TouchableOpacity style={[styles.floatingBackButton, {backgroundColor: colors.card}]} onPress={() => router.back()}>
-                <Ionicons name = "arrow-back" size ={24} color = {colors.text}/>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+            <TouchableOpacity
+                style={[styles.floatingBackButton, { backgroundColor: colors.card }]}
+                onPress={() => router.back()}
+                accessibilityRole="button"
+                accessibilityLabel="Volver"
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+                <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
 
             <View style={styles.header}>
-                <Text style={[styles.title, {color: colors.text}]}>Mis Favoritos</Text>
+                <Text style={[styles.title, { color: colors.text }]}>Mis Favoritos</Text>
             </View>
 
             {lugares.length === 0 ? (
                 <View style={styles.centrado}>
-                    <Ionicons name = "star-outline" size ={48} color ={colors.textSecondary} />
-                    <Text style = {[styles.emptyText, {color:colors.textSecondary}]}>Aún no tenés favoritos.</Text>
-                </View>    
+                    <Ionicons name="star-outline" size={48} color={colors.textSecondary} />
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                        Aún no tenés favoritos.
+                    </Text>
+                </View>
             ) : (
                 <FlatList
                     data={lugares}
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={styles.lista}
                     renderItem={({ item }) => (
-                        <TouchableOpacity style={[
-                            styles.item,
-                            {
-                                backgroundColor: colors.card,
-                                borderColor: colors.border,
-                                borderWidth: theme === "dark" ? 1 : 0,
-                            },
-                        ]}       
-                            onPress={() => router.push(`/lugar/${item.id}`)}>
-                            <Text style={[styles.itemNombre, { color: colors.text }]}>{item.nombre}</Text>
-                            <Ionicons name="chevron-forward" size ={20} color={colors.textSecondary}/>
+                        <TouchableOpacity
+                            style={[
+                                styles.item,
+                                {
+                                    backgroundColor: colors.card,
+                                    borderColor: colors.border,
+                                    borderWidth: theme === "dark" ? 1 : 0,
+                                },
+                            ]}
+                            onPress={() => router.push(`/lugar/${item.id}`)}
+                        >
+                            <Text style={[styles.itemNombre, { color: colors.text }]}>
+                                {item.nombre}
+                            </Text>
+                            <Ionicons
+                                name="chevron-forward"
+                                size={20}
+                                color={colors.textSecondary}
+                            />
                         </TouchableOpacity>
                     )}
                 />

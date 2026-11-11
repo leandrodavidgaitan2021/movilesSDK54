@@ -59,10 +59,10 @@ export default function DetalleLugarScreen() {
 
   useEffect(() => {
     async function verificarFavorito() {
-      if (typeof id === "string" && user) {
-        const favorito = await esFavorito(user, id);
-        setEsFav(favorito);
-      } else {
+      try {
+        setEsFav(typeof id === "string" && user ? await esFavorito(user, id) : false);
+      } catch (error) {
+        console.error("No se pudo verificar el favorito:", error);
         setEsFav(false);
       }
     }
@@ -83,8 +83,12 @@ export default function DetalleLugarScreen() {
     }
 
     if (typeof id === "string") {
-      const nuevoEstado = await cambiarFavorito(user, id);
-      setEsFav(nuevoEstado);
+      try {
+        setEsFav(await cambiarFavorito(user, id));
+      } catch (error) {
+        console.error("No se pudo cambiar el favorito:", error);
+        Alert.alert("No se pudo guardar", "Intentá de nuevo en unos segundos.");
+      }
     }
   }
 
@@ -163,8 +167,15 @@ export default function DetalleLugarScreen() {
           <Text style={[styles.title, { color: colors.text }]}>
             {lugar.nombre}
           </Text>
-          <TouchableOpacity onPress={cambiarEstrella} accessibilityLabel={esFav ? "Quitar de favoritos" : "Agregar a favoritos"}>
-            <Ionicons name={esFav ? "star" : "star-outline"} size={26} color="#f1c40f" />
+          <TouchableOpacity 
+            onPress={cambiarEstrella}
+            accessibilityRole="button" 
+            accessibilityLabel={esFav ? "Quitar de favoritos" : "Agregar a favoritos"}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12}}>
+            <Ionicons 
+              name={esFav ? "star" : "star-outline"} 
+              size={30} 
+              color={theme === "dark" ? "#f1c40f" : "#b9770e"} />
           </TouchableOpacity>
         </View>
 

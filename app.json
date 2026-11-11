@@ -56,6 +56,12 @@
           "locationPermission": "Permite acceder a tu ubicación para calcular la distancia a los lugares turísticos de Colón."
         }
       ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Permite usar Face ID para ingresar de forma rápida."
+        }
+      ],
       "expo-secure-store",
       "expo-audio",
       [
