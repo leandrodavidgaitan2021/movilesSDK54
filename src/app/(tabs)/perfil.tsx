@@ -6,16 +6,19 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Switch,
 } from "react-native";
 import { useRouter } from "expo-router";
 import AccesoRestringido from "../../components/AccesoRestringido";
 import { useAuth } from "../../hooks/useAuth";
 import { useTheme } from "../../hooks/useTheme";
+import { useLoginBiometrico } from "../../hooks/useLoginBiometrico";
 
 export default function PerfilScreen() {
   const router = useRouter();
   const { colors, theme } = useTheme();
-  const { user, cargando, logout } = useAuth();
+  const { user, cargando, token, logout } = useAuth();
+  const { sensor, activa, activar, desactivar } = useLoginBiometrico();
 
   if (cargando) {
     return (
@@ -59,6 +62,37 @@ export default function PerfilScreen() {
           dispositivo.
         </Text>
       </View>
+
+      { sensor && (
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderWidth: theme === "dark" ? 1 : 0,
+            },
+          ]}
+      >
+        <View style={styles.filaSwitch}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              Ingreso con biometría
+            </Text>
+            <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
+              Entrá sin escribir tu contraseña.
+            </Text>
+          </View>
+          <Switch
+            value={activa}
+            onValueChange={(valor) => {
+              if (valor && user && token) activar(user, token);
+              else if (!valor) desactivar();
+            }}
+          />
+        </View>
+      </View>
+    )}
 
       <TouchableOpacity
         style={styles.favoritosButton}
@@ -112,6 +146,11 @@ const styles = StyleSheet.create({
   },
   cardDesc: { 
     fontSize: 13 
+  },
+  filaSwitch: {
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 12 
   },
   favoritosButton: { 
     flexDirection: "row", 

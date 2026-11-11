@@ -17,18 +17,16 @@ import * as z from "zod";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../hooks/useTheme";
 import { useLoginBiometrico } from "../hooks/useLoginBiometrico";
-import { apiIngresar } from "../servicios/auth"; // <-- Importamos tu servicio de Axios
+import { apiIngresar } from "../servicios/auth";
 
+// Al ingresar solo se exige que los campos no estén vacíos: las reglas de
+// largo y número corresponden al registro, y la API ya valida las credenciales.
 const loginSchema = z.object({
   email: z
     .string()
     .min(1, "El correo es requerido")
     .email("Correo electrónico inválido"),
-  password: z
-    .string()
-    .min(8, "La contraseña debe tener al menos 8 caracteres")
-//    .regex(/[A-Z]/, "Debe contener al menos una letra mayúscula")
-    .regex(/[0-9]/, "Debe contener al menos un número"),
+  password: z.string().min(1, "La contraseña es requerida"),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
@@ -38,17 +36,43 @@ export default function LoginScreen() {
   const { redirect } = useLocalSearchParams<{ redirect?: string }>();
   const { login } = useAuth();
   const { colors } = useTheme();
-  const { disponible: hayBiometria, entrar: entrarConBiometria } = useLoginBiometrico();
+  const {
+    disponible: hayBiometria,
+    sensor,
+    activa,
+    entrar: entrarConBiometria,
+    activar,
+    actualizar,
+  } = useLoginBiometrico();
+
+  const irAlDestino = () => {
+    router.replace((redirect ?? "/(tabs)/perfil") as any);
+  };
 
   const handleLoginBiometrico = async () => {
     const exito = await entrarConBiometria();
-    if (!exito) return;
-    if (redirect) {
-      router.replace(redirect as any);
-    } else {
-      router.replace("/(tabs)/perfil");
-    }
+    if (exito) irAlDestino();
   };
+
+  // Pregunta si quiere activar la huella y espera la respuesta antes de seguir
+  const ofrecerActivar = (email: string, token: string) =>
+    new Promise<void>((resolver) => {
+      Alert.alert(
+        "Ingreso con huella",
+        "¿Querés ingresar con tu huella o rostro la próxima vez?",
+        [
+          { text: "Ahora no", style: "cancel", onPress: () => resolver() },
+          {
+            text: "Activar",
+            onPress: async () => {
+              await activar(email, token);
+              resolver();
+            },
+          },
+        ],
+        { cancelable: false },
+      );
+    });
 
   const {
     control,
@@ -68,15 +92,19 @@ export default function LoginScreen() {
         email: data.email,
         contrasena: data.password,
       });
+      const { email } = respuesta.usuario;
 
       // Guardamos el email del objeto usuario y el token recibido
-      await login(respuesta.usuario.email, respuesta.token);
+      await login(email, respuesta.token);
 
-      if (redirect) {
-        router.replace(redirect as any);
-      } else {
-        router.replace("/(tabs)/perfil");
+      // Si la huella ya estaba activada para esta cuenta, renovamos su token;
+      // si no, y el celular lo permite, ofrecemos activarla.
+      await actualizar(email, respuesta.token);
+      if (sensor && !activa) {
+        await ofrecerActivar(email, respuesta.token);
       }
+
+      irAlDestino();
     } catch (error: any) {
       console.error("Error al iniciar sesión:", error);
       const mensajeError =
@@ -167,7 +195,7 @@ export default function LoginScreen() {
         >
           <Text style={styles.buttonText}>Ingresar</Text>
         </TouchableOpacity>
-        
+
         {hayBiometria && (
           <TouchableOpacity
             style={[styles.biometriaButton, { borderColor: colors.primary }]}
@@ -175,7 +203,7 @@ export default function LoginScreen() {
             accessibilityLabel="Entrar con huella o rostro"
           >
             <Ionicons name="finger-print" size={20} color={colors.primary} />
-            <Text style={[styles.biometriaButtonText, { color: colors.primary}]}>
+            <Text style={[styles.biometriaButtonText, { color: colors.primary }]}>
               Entrar con huella o rostro
             </Text>
           </TouchableOpacity>

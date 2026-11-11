@@ -24,7 +24,7 @@ api.interceptors.request.use(
 
       // 2. Adjuntamos automáticamente el Bearer Token si existe
       const sesion = await leerSesion();
-      if (sesion && sesion.token) {
+      if (sesion && sesion.token && !config.headers.Authorization) {
         config.headers.Authorization = `Bearer ${sesion.token}`;
       }
     } catch (error) {

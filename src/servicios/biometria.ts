@@ -1,3 +1,4 @@
+// src/servicios/biometria.ts
 import * as LocalAuthentication from "expo-local-authentication";
 
 export async function biometriaDisponible(): Promise<boolean> {
@@ -8,13 +9,15 @@ export async function biometriaDisponible(): Promise<boolean> {
     } catch (error) {
         console.error("Error al consultar la biometría", error);
         return false;
-    }   
+    }
 }
 
-export async function pedirBiometria(): Promise <boolean> {
+export async function pedirBiometria(
+    mensaje: string = "Confirmá tu identidad para ingresar",
+): Promise<boolean> {
     try {
         const resultado = await LocalAuthentication.authenticateAsync({
-            promptMessage: "Confirmá tu identidad para ingresar",
+            promptMessage: mensaje,
             cancelLabel: "Cancelar",
         });
         return resultado.success;
