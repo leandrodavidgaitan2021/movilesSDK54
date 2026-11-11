@@ -1,4 +1,3 @@
-// src/components/PanelFiltros.tsx
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Categoria } from "../tipos";
@@ -79,7 +78,7 @@ export default function PanelFiltros({
           </Text>
         </TouchableOpacity>
 
-        {/* Mapeamos usando cat.id para que coincida con lugar.categoriaId */}
+        {/* esto mapea usando cat.id para que coincida con lugar.categoriaId */}
         {categorias.map((cat) => {
           const seleccionada = categoriaSeleccionada === cat.id;
 
@@ -96,7 +95,7 @@ export default function PanelFiltros({
                     : "#eee",
                 },
               ]}
-              onPress={() => seleccionarCategoria(cat.id)} // Pasamos el ID exacto (ej: "cat-playas")
+              onPress={() => seleccionarCategoria(cat.id)}
             >
               <Text
                 style={[
@@ -106,7 +105,7 @@ export default function PanelFiltros({
                   },
                 ]}
               >
-                {cat.nombre} {/* Mostramos el nombre legible al usuario */}
+                {cat.nombre}
               </Text>
             </TouchableOpacity>
           );

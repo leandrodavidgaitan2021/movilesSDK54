@@ -4,7 +4,6 @@ import { Lugar, Categoria } from "../tipos";
 import { db } from "./db";
 import { hayConexionInternet } from "./red";
 
-// Obtener listado de lugares (Network-First con caché local)
 export async function obtenerLugares(filtroBusqueda?: string): Promise<{
   datos: Lugar[];
   meta: { total: number; pagina: number; porPagina: number };
@@ -22,7 +21,6 @@ export async function obtenerLugares(filtroBusqueda?: string): Promise<{
       
       const resultado = response.data;
 
-      // Actualizamos la caché local SQLite con los campos detallados y el objeto completo en dataJson
       for (const lugar of resultado.datos) {
         db.runSync(
           `INSERT OR REPLACE INTO lugares_cache (id, nombre, categoriaId, descripcionCorta, precioEntrada, accesible, activo, actualizadoEn, dataJson) 
@@ -49,7 +47,6 @@ export async function obtenerLugares(filtroBusqueda?: string): Promise<{
     console.warn("Sin señal detectada. Cargando catálogo de lugares desde SQLite local...");
   }
 
-  // Fallback / Modo Offline: Leemos de la base de datos local
   let query = `SELECT dataJson FROM lugares_cache`;
   let params: any[] = [];
 
@@ -72,7 +69,6 @@ export async function obtenerLugares(filtroBusqueda?: string): Promise<{
   };
 }
 
-// Obtener un lugar específico por su ID (con respaldo local)
 export async function obtenerLugarPorId(id: string): Promise<Lugar | null> {
   const tieneRed = await hayConexionInternet();
 
@@ -104,7 +100,6 @@ export async function obtenerLugarPorId(id: string): Promise<Lugar | null> {
     }
   }
 
-  // Búsqueda offline en SQLite
   const row = db.getFirstSync(`SELECT dataJson FROM lugares_cache WHERE id = ?`, [id]) as { dataJson: string } | null;
   if (row) {
     return JSON.parse(row.dataJson);
@@ -113,7 +108,6 @@ export async function obtenerLugarPorId(id: string): Promise<Lugar | null> {
   return null;
 }
 
-// Obtener categorías (con respaldo local)
 export async function obtenerCategorias(): Promise<Categoria[]> {
   const tieneRed = await hayConexionInternet();
 
@@ -143,7 +137,6 @@ export async function obtenerCategorias(): Promise<Categoria[]> {
     }
   }
 
-  // Ordenamos por la propiedad orden para mantener la consistencia visual
   const rows = db.getAllSync(`SELECT dataJson FROM categorias_cache ORDER BY orden ASC`) as { dataJson: string }[];
   return rows.map(row => JSON.parse(row.dataJson));
 }

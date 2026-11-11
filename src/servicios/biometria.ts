@@ -1,4 +1,3 @@
-// src/servicios/biometria.ts
 import * as LocalAuthentication from "expo-local-authentication";
 
 export async function biometriaDisponible(): Promise<boolean> {

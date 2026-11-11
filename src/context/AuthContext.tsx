@@ -1,4 +1,3 @@
-// src/context/AuthContext.tsx
 import { createContext, ReactNode, useState, useEffect } from "react";
 import { borrarSesion, guardarSesion, leerSesion } from "../servicios/sesion";
 

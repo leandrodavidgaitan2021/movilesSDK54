@@ -1,10 +1,9 @@
-// src/app/(tabs)/_layout.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { useTheme } from "../../hooks/useTheme"; // <-- Importamos el hook del tema global
+import { useTheme } from "../../hooks/useTheme";
 
 export default function TabLayout() {
-  const { colors, theme } = useTheme(); // <-- Extraemos los colores y el tema actual
+  const { colors, theme } = useTheme(); 
 
   return (
     <Tabs

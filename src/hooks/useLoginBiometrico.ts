@@ -1,4 +1,3 @@
-// src/hooks/useLoginBiometrico.ts
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { Alert } from "react-native";
@@ -13,8 +12,8 @@ import { useAuth } from "./useAuth";
 
 export function useLoginBiometrico() {
     const { login } = useAuth();
-    const [sensor, setSensor] = useState<boolean>(false); // el celular tiene huella/rostro registrado
-    const [activa, setActiva] = useState<boolean>(false); // el usuario la activó en la app
+    const [sensor, setSensor] = useState<boolean>(false);
+    const [activa, setActiva] = useState<boolean>(false);
 
     useEffect(() => {
         async function verificar() {
@@ -79,7 +78,7 @@ export function useLoginBiometrico() {
     }
 
     return {
-        disponible: sensor && activa, // lo que ya usa login.tsx para mostrar el botón
+        disponible: sensor && activa,
         sensor,
         activa,
         entrar,

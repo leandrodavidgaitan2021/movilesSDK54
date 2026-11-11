@@ -1,8 +1,7 @@
-// src/components/AccesoRestringido.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useTheme } from "../hooks/useTheme"; // <-- Importamos el hook del tema global
+import { useTheme } from "../hooks/useTheme";
 
 interface AccesoRestringidoProps {
   subtitulo: string;
@@ -12,13 +11,13 @@ export default function AccesoRestringido({
   subtitulo,
 }: AccesoRestringidoProps) {
   const router = useRouter();
-  const pathname = usePathname(); // <-- Obtenemos la ruta actual (ej. "/(tabs)/recorrido")
-  const { colors } = useTheme(); // <-- Extraemos los colores del tema actual
+  const pathname = usePathname(); 
+  const { colors } = useTheme(); 
 
   const handleIrAlLogin = () => {
     router.push({
       pathname: "/login",
-      params: { redirect: pathname }, // <-- Enviamos la ruta de retorno
+      params: { redirect: pathname },
     });
   };
 
@@ -37,7 +36,7 @@ export default function AccesoRestringido({
       </Text>
       <TouchableOpacity
         style={[styles.button, { backgroundColor: colors.primary }]}
-        onPress={handleIrAlLogin} // <-- Usamos la función con los parámetros
+        onPress={handleIrAlLogin}
       >
         <Text style={styles.buttonText}>Ir a Iniciar Sesión</Text>
       </TouchableOpacity>

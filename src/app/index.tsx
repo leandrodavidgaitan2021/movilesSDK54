@@ -1,7 +1,7 @@
-// app/index.tsx
+
 import { useRouter } from "expo-router";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useTheme } from "../hooks/useTheme"; // Ajusta la ruta de tu hook según corresponda
+import { useTheme } from "../hooks/useTheme";
 
 export default function PantallaBienvenida() {
   const router = useRouter();

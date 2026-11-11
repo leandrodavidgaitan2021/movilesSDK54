@@ -41,8 +41,8 @@ export interface Lugar {
 export interface Categoria {
   id: string;
   nombre: string;
-  icono: string; // nombre del icono de Ionicons
-  color: string; // hexadecimal
+  icono: string;
+  color: string;
   orden: number;
 }
 
@@ -65,7 +65,7 @@ export interface Evento {
 export interface Preferencias {
   categoriasFavoritas: string[];
   avisarProximidad: boolean;
-  radioAvisoMetros: number; // 100, 250 o 500
+  radioAvisoMetros: number;
   tema: "claro" | "oscuro" | "sistema";
 }
 
