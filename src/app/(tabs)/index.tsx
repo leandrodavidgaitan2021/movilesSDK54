@@ -1,12 +1,11 @@
-// src/app/(tabs)/index.tsx
 import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View, Alert } from "react-native";
-import * as Location from "expo-location";
 import CabeceraInicio from "../../components/CabeceraInicio";
 import ListaLugares from "../../components/ListaLugares";
 import MapaLugares from "../../components/MapaLugares";
 import SimuladorUbicacion from "../../components/SimuladorUbicacion";
 import { useTheme } from "../../hooks/useTheme";
+import { useLocation } from "../../hooks/useLocation"; // <-- Importamos nuestro hook desacoplado
 import { obtenerLugares, obtenerCategorias } from "../../servicios/lugares";
 import { Lugar, Categoria } from "../../tipos";
 
@@ -31,57 +30,28 @@ function calcularDistancia(
 
 export default function PantallaInicio() {
   const { colors, theme } = useTheme();
+  
+  // Utilizamos la logica del contexto de ubicacioón
+  const {
+    ubicacionActual,
+    cambiarCoordenadasManual,
+    activarGpsReal,
+    inputLat,
+    inputLon,
+    setInputLat,
+    setInputLon,
+  } = useLocation();
+
   const [lugares, setLugares] = useState<Lugar[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
 
-  // Ubicación actual (por defecto Colón, Entre Ríos)
-  const [ubicacionActual, setUbicacionActual] = useState<{
-    latitud: number;
-    longitud: number;
-  }>({
-    latitud: -32.21568,
-    longitud: -58.13649,
-  });
-
-  // Estados para el Simulador de Ubicación
   const [mostrarSimulador, setMostrarSimulador] = useState<boolean>(false);
-  const [inputLat, setInputLat] = useState<string>("-32.21568");
-  const [inputLon, setInputLon] = useState<string>("-58.13649");
-
   const [busquedaTexto, setBusquedaTexto] = useState<string>("");
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>("Todos");
   const [mostrarFiltrosExtra, setMostrarFiltrosExtra] = useState<boolean>(false);
 
-  // 1. Obtener ubicación real por GPS al iniciar
-  useEffect(() => {
-    async function obtenerUbicacionGPS() {
-      try {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          console.warn("Permiso de ubicación denegado. Usando ubicación por defecto.");
-          return;
-        }
-
-        let location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-
-        const lat = location.coords.latitude;
-        const lon = location.coords.longitude;
-
-        setUbicacionActual({ latitud: lat, longitud: lon });
-        setInputLat(lat.toString());
-        setInputLon(lon.toString());
-      } catch (error) {
-        console.error("Error al obtener la ubicación del GPS:", error);
-      }
-    }
-
-    obtenerUbicacionGPS();
-  }, []);
-
-  // 2. Inicializar datos del backend en paralelo
+  // Consultamos al backend o de SQLite (offline)
   useEffect(() => {
     async function inicializar() {
       try {
@@ -105,13 +75,6 @@ export default function PantallaInicio() {
     inicializar();
   }, []);
 
-  // Funciones del simulador
-  const cambiarCoordenadasManual = (lat: number, lon: number) => {
-    setUbicacionActual({ latitud: lat, longitud: lon });
-    setInputLat(lat.toString());
-    setInputLon(lon.toString());
-  };
-
   const aplicarCoordenadasInputs = () => {
     const latNum = parseFloat(inputLat);
     const lonNum = parseFloat(inputLon);
@@ -121,31 +84,7 @@ export default function PantallaInicio() {
       return;
     }
 
-    setUbicacionActual({ latitud: latNum, longitud: lonNum });
-  };
-
-  const activarGpsReal = async () => {
-    try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permiso denegado", "No se pudo acceder a los permisos de ubicación.");
-        return;
-      }
-
-      let location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const lat = location.coords.latitude;
-      const lon = location.coords.longitude;
-
-      setUbicacionActual({ latitud: lat, longitud: lon });
-      setInputLat(lat.toString());
-      setInputLon(lon.toString());
-      Alert.alert("GPS Activado", "Ubicación real sincronizada correctamente.");
-    } catch (error) {
-      Alert.alert("Error", "No se pudo obtener la posición actual del GPS.");
-    }
+    cambiarCoordenadasManual(latNum, lonNum);
   };
 
   const lugaresFiltrados = useMemo(() => {
@@ -195,7 +134,7 @@ export default function PantallaInicio() {
       <View style={[styles.centrado, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[styles.textoCargando, { color: colors.textSecondary }]}>
-          Cargando Guía Turística y GPS...
+          Cargando Guía Turística de Colón...
         </Text>
       </View>
     );
@@ -203,10 +142,9 @@ export default function PantallaInicio() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* 1. Cabecera (puedes agregar un botón para alternar el simulador si lo deseas) */}
       <CabeceraInicio colors={colors} theme={theme} />
 
-      {/* Botón opcional para desplegar/ocultar el simulador */}
+      {/* Boton para mostrar/ocultar el simulador */}
       <View style={{ paddingHorizontal: 15, paddingVertical: 5 }}>
         <Text 
           style={{ fontSize: 12, color: colors.primary, fontWeight: "600", textAlign: "right" }}
@@ -216,7 +154,7 @@ export default function PantallaInicio() {
         </Text>
       </View>
 
-      {/* Componente Simulador de Ubicación */}
+      {/* Componente simulador de ubicación */}
       <SimuladorUbicacion
         mostrar={mostrarSimulador}
         inputLat={inputLat}
@@ -228,12 +166,12 @@ export default function PantallaInicio() {
         onGpsReal={activarGpsReal}
       />
 
-      {/* 2. Mapa */}
+      {/* Componenete que muestra el mapa de lugares */}
       <View style={styles.mapaContainer}>
-        <MapaLugares ubicacionActual={ubicacionActual} lugares={lugaresFiltrados} />
+        <MapaLugares lugares={lugaresFiltrados} />
       </View>
 
-      {/* 3. Lista de lugares y filtros */}
+      {/* Componente que lista los lugares y permite filtrar */}
       <ListaLugares
         lugaresFiltrados={lugaresFiltrados}
         categorias={categorias}

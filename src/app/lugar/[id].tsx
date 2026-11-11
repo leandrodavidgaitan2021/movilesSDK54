@@ -16,11 +16,12 @@ import {
 
 import { useTheme } from "../../hooks/useTheme";
 import { useAuth } from "../../hooks/useAuth";
+import { useLocation } from "../../hooks/useLocation"; // <-- 1. Importamos el hook de ubicación
 import { cambiarFavorito, esFavorito } from "../../servicios/favoritos";
 import { obtenerLugarPorId } from "../../servicios/lugares";
 import { Lugar } from "../../tipos";
 
-// Componentes modularizados
+// Componentes que se utilizan para mostrar datos del lugar
 import CarruselImagenes from "../../components/CarruselImagenes";
 import ReproductorAudio from "../../components/ReproductorAudio";
 import InfoLugaresBadges from "../../components/InfoLugaresBadges";
@@ -31,6 +32,9 @@ export default function DetalleLugarScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { colors, theme } = useTheme();
+  
+  // Se obtenemos la ubicación actual (ya sea la por defecto, la del GPS o la simulada)
+  const { ubicacionActual } = useLocation();
 
   const [lugar, setLugar] = useState<Lugar | null>(null);
   const [cargando, setCargando] = useState<boolean>(true);
@@ -96,8 +100,10 @@ export default function DetalleLugarScreen() {
     if (!lugar || !lugar.coordenadas) return;
 
     const { latitud: latDestino, longitud: lonDestino } = lugar.coordenadas;
-    const latOrigen = -32.21568; 
-    const lonOrigen = -58.13649; 
+    
+    // con esto usamos la ubicación del contexto (GPS real o simulada) como origen de la ruta
+    const latOrigen = ubicacionActual.latitud; 
+    const lonOrigen = ubicacionActual.longitud; 
 
     const url = Platform.select({
       ios: `maps://app?saddr=${latOrigen},${lonOrigen}&daddr=${latDestino},${lonDestino}`,
@@ -150,7 +156,7 @@ export default function DetalleLugarScreen() {
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]} bounces={false}>
       
-      {/* 1. Carrusel de Imágenes */}
+      {/* carrusel de imágenes */}
       <CarruselImagenes
         imagenes={lugar.imagenes}
         colors={colors}
@@ -186,13 +192,13 @@ export default function DetalleLugarScreen() {
           </Text>
         </View>
 
-        {/* 2. Reproductor de Audioguía moderno con expo-audio */}
+        {/* Muestra el componente reproductor de audioguía*/}
         <ReproductorAudio
           audioguia={lugar.audioguia}
           colors={colors}
         />
 
-        {/* Botón Cómo llegar */}
+        {/* Muestra el botón - Cómo llegar */}
         <TouchableOpacity
           style={[
             styles.mapButton,
@@ -210,7 +216,7 @@ export default function DetalleLugarScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* 3. Insignias de información */}
+        {/* muestra las insignias de información */}
         <InfoLugaresBadges
           precioEntrada={lugar.precioEntrada}
           accesible={lugar.accesible}
@@ -218,7 +224,7 @@ export default function DetalleLugarScreen() {
           theme={theme}
         />
 
-        {/* Contacto */}
+        {/* Muetra los datos de contacto si los tiene*/}
         {(lugar.telefono || lugar.sitioWeb) && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Contacto</Text>
@@ -245,10 +251,10 @@ export default function DetalleLugarScreen() {
           </View>
         )}
 
-        {/* 4. Horarios de Apertura */}
+        {/* componente de horarios de apertura */}
         <HorariosAtencion horarios={lugar.horarios} colors={colors} />
 
-        {/* Descripción */}
+        {/* descripción */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Acerca del lugar</Text>
           <Text style={[styles.description, { color: colors.textSecondary }]}>
@@ -262,16 +268,53 @@ export default function DetalleLugarScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  centrado: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
-  textoCargando: { marginTop: 10, fontSize: 16 },
-  errorText: { fontSize: 16, marginTop: 10, marginBottom: 20 },
-  content: { padding: 16 },
-  categoria: { fontSize: 11, fontWeight: "bold", marginBottom: 4 },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 4, flex: 1 },
-  filaTitulo: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
-  coordenadasContainer: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  coordenadasText: { fontSize: 12, marginLeft: 4 },
+  container: { 
+    flex: 1 
+  },
+  centrado: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    padding: 20 
+  },
+  textoCargando: { 
+    marginTop: 10, 
+    fontSize: 16 
+  },
+  errorText: { 
+    fontSize: 16, 
+    marginTop: 10, 
+    marginBottom: 20 
+  },
+  content: { 
+    padding: 16 
+  },
+  categoria: { 
+    fontSize: 11, 
+    fontWeight: "bold", 
+    marginBottom: 4 
+  },
+  title: { 
+    fontSize: 22, 
+    fontWeight: "bold", 
+    marginBottom: 4, 
+    flex: 1 
+  },
+  filaTitulo: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    marginBottom: 6 
+  },
+  coordenadasContainer: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    marginBottom: 12 
+  },
+  coordenadasText: { 
+    fontSize: 12, 
+    marginLeft: 4 
+  },
   mapButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -282,13 +325,46 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 14,
   },
-  mapButtonText: { fontSize: 13, fontWeight: "bold" },
-  section: { marginBottom: 14 },
-  sectionTitle: { fontSize: 15, fontWeight: "bold", marginBottom: 6 },
-  description: { fontSize: 13, lineHeight: 20 },
-  contactoInlineContainer: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  contactoChip: { flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, gap: 6 },
-  contactoChipText: { fontSize: 13, fontWeight: "600" },
-  backButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
-  backButtonText: { color: "#fff", fontWeight: "bold" },
+  mapButtonText: { 
+    fontSize: 13, 
+    fontWeight: "bold" 
+  },
+  section: { 
+    marginBottom: 14 
+  },
+  sectionTitle: { 
+    fontSize: 15, 
+    fontWeight: "bold", 
+    marginBottom: 6 
+  },
+  description: { 
+    fontSize: 13, 
+    lineHeight: 20 
+  },
+  contactoInlineContainer: { 
+    flexDirection: "row", 
+    flexWrap: "wrap", 
+    gap: 8 
+  },
+  contactoChip: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingVertical: 6, 
+    paddingHorizontal: 10, 
+    borderRadius: 8, 
+    gap: 6 
+  },
+  contactoChipText: { 
+    fontSize: 13, 
+    fontWeight: "600" 
+  },
+  backButton: { 
+    paddingVertical: 10, 
+    paddingHorizontal: 20, 
+    borderRadius: 8 
+  },
+  backButtonText: { 
+    color: "#fff", 
+    fontWeight: "bold" 
+  },
 });

@@ -1,9 +1,7 @@
-// src/components/CabeceraInicio.tsx
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
-// 1. Define la interfaz de las propiedades que recibe el componente
 interface Props {
   colors: {
     background: string;
@@ -16,7 +14,6 @@ interface Props {
   theme: string;
 }
 
-// 2. Desestructura props tipadas correctamente
 export default function CabeceraInicio({ colors, theme }: Props) {
   const router = useRouter();
 
@@ -56,6 +53,12 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     borderBottomWidth: 1,
   },
-  headerTitle: { fontSize: 18, fontWeight: "bold" },
-  qrButton: { padding: 6, borderRadius: 8 },
+  headerTitle: { 
+    fontSize: 18, 
+    fontWeight: "bold" 
+  },
+  qrButton: { 
+    padding: 6, 
+    borderRadius: 8 
+  },
 });

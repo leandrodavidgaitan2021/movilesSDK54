@@ -1,20 +1,22 @@
-// src/componentes/MapaLugares.tsx
 import { StyleSheet, View, Text, TouchableOpacity } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Lugar } from "../tipos";
+import { useLocation } from "../hooks/useLocation";
 
 interface Props {
-  ubicacionActual: { latitud: number; longitud: number };
-  lugares: Lugar[];
+  lugares: Lugar[]; 
 }
 
-export default function MapaLugares({ ubicacionActual, lugares }: Props) {
+export default function MapaLugares({ lugares }: Props) {
   const router = useRouter();
+  
+  // extrae la ubicación actual desde el contexto
+  const { ubicacionActual } = useLocation();
 
-  // Función para verificar si la ubicación actual coincide con algún lugar de la lista
+  // Función que verificar si la ubicación actual coincide con algún lugar de la lista
   const obtenerDatosUbicacionActual = () => {
     const lugarEncontrado = lugares.find(
       (lugar) =>
@@ -49,7 +51,7 @@ export default function MapaLugares({ ubicacionActual, lugares }: Props) {
     esUbicacionActual: boolean;
   } | null>(obtenerDatosUbicacionActual);
 
-  // Verificamos si estamos en un lugar de la lista para no duplicar el marcador
+  // Con esto verificamos si estamos en un lugar de la lista para no duplicar el marcador
   const lugarActualEnLista = lugares.find(
     (lugar) =>
       Math.abs(lugar.coordenadas.latitud - ubicacionActual.latitud) < 0.0001 &&
@@ -71,7 +73,7 @@ export default function MapaLugares({ ubicacionActual, lugares }: Props) {
           setLugarSeleccionado(obtenerDatosUbicacionActual());
         }}
       >
-        {/* Marcador de tu ubicación actual (solo si NO estás exactamente en un lugar de la lista) */}
+        {/* Marcador de tu ubicación actual, solo si NO estás exactamente en un lugar de la lista */}
         {!lugarActualEnLista && (
           <Marker
             coordinate={{
@@ -86,9 +88,8 @@ export default function MapaLugares({ ubicacionActual, lugares }: Props) {
           />
         )}
 
-    {/* Marcadores de los lugares */}
+        {/* Marcadores de los lugares */}
         {lugares.map((lugar) => {
-          // Comparamos directamente si este lugar coincide con las coordenadas actuales
           const esEsteLugar =
             Math.abs(lugar.coordenadas.latitud - ubicacionActual.latitud) < 0.0001 &&
             Math.abs(lugar.coordenadas.longitud - ubicacionActual.longitud) < 0.0001;
@@ -100,7 +101,6 @@ export default function MapaLugares({ ubicacionActual, lugares }: Props) {
                 latitude: lugar.coordenadas.latitud,
                 longitude: lugar.coordenadas.longitud,
               }}
-              // Si es tu ubicación actual, se fuerza obligatoriamente a "blue"
               pinColor={esEsteLugar ? "blue" : "red"}
               onPress={(e) => {
                 e.stopPropagation();
@@ -121,7 +121,7 @@ export default function MapaLugares({ ubicacionActual, lugares }: Props) {
         })}
       </MapView>
 
-      {/* Globo de diálogo flotante estilo historieta */}
+      {/* Esto muestra un globo de diálogo flotante estilo historieta */}
       {lugarSeleccionado && (
         <View style={styles.contenedorGlobo}>
           <View
@@ -164,7 +164,6 @@ export default function MapaLugares({ ubicacionActual, lugares }: Props) {
             )}
           </View>
 
-          {/* Pico del globo con color dinámico según la ubicación */}
           <View
             style={[
               styles.picoGlobo,
@@ -178,8 +177,14 @@ export default function MapaLugares({ ubicacionActual, lugares }: Props) {
 }
 
 const styles = StyleSheet.create({
-  mapContainer: { flex: 1, position: "relative" },
-  map: { width: "100%", height: "100%" },
+  mapContainer: { 
+    flex: 1, 
+    position: "relative" 
+  },
+  map: { 
+    width: "100%", 
+    height: "100%" 
+  },
 
   contenedorGlobo: {
     position: "absolute",
@@ -191,7 +196,7 @@ const styles = StyleSheet.create({
   },
   globoDialogo: {
     width: "100%",
-    backgroundColor: "white", // Fondo normal para otros lugares
+    backgroundColor: "white",
     borderRadius: 16,
     padding: 14,
     shadowColor: "#000",
@@ -202,7 +207,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: "#e0e0e0",
   },
-  // Fondo especial cuando estás en tu ubicación actual
   fondoUbicacionActual: {
     backgroundColor: "#e8f0fe", 
     borderColor: "#b9d2ff",
@@ -217,10 +221,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 12,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
-    borderTopColor: "white", // Color normal del pico
+    borderTopColor: "white",
     marginTop: -1,
   },
-  // Pico con color adaptado al fondo de la ubicación actual
   picoUbicacionActual: {
     borderTopColor: "#e8f0fe",
   },

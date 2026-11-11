@@ -1,4 +1,3 @@
-// src/components/ListaLugares.tsx
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -87,7 +86,7 @@ export default function ListaLugares({
             <Ionicons name="chevron-down" size={12} color={colors.primary} />
           </TouchableOpacity>
 
-          {/* Botón Limpiar (aparece solo si hay filtro o búsqueda activa) */}
+          {/* Botón para limpiar, solo si hay filtro o búsqueda activada */}
           {(busquedaTexto !== "" || categoriaSeleccionada !== "Todos") && (
             <TouchableOpacity
               style={[
@@ -108,7 +107,7 @@ export default function ListaLugares({
         </View>
       </View>
 
-      {/* Modal que envuelve a PanelFiltros para que se abra flotando */}
+      {/* este modal envuelve a PanelFiltros para que se abra flotando */}
       {mostrarFiltrosExtra && (
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -127,7 +126,7 @@ export default function ListaLugares({
               categoriaSeleccionada={categoriaSeleccionada}
               seleccionarCategoria={(cat) => {
                 seleccionarCategoria(cat);
-                setMostrarFiltrosExtra(false); // Opcional: cierra el modal al seleccionar una categoría
+                setMostrarFiltrosExtra(false);
               }}
               categorias={categorias}
             />
@@ -256,7 +255,17 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  lugarNombre: { fontSize: 15, fontWeight: "600" },
-  lugarDesc: { fontSize: 12, maxWidth: 220, marginTop: 2 },
-  lugarDistancia: { fontSize: 13, fontWeight: "bold" },
+  lugarNombre: { 
+    fontSize: 15, 
+    fontWeight: "600" 
+  },
+  lugarDesc: { 
+    fontSize: 12, 
+    maxWidth: 220, 
+    marginTop: 2 
+  },
+  lugarDistancia: { 
+    fontSize: 13, 
+    fontWeight: "bold" 
+  },
 });

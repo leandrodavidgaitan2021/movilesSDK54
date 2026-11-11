@@ -1,13 +1,7 @@
-// src/servicios/db.ts
 import * as SQLite from 'expo-sqlite';
 
-// Abre o crea la base de datos local del proyecto
 const db = SQLite.openDatabaseSync('colon_turismo.db');
 
-/**
- * Inicializa y crea las tablas locales reflejando fielmente
- * las interfaces Lugar y Categoria de TypeScript.
- */
 export function inicializarBaseDeDatosLocal() {
   try {
     db.execSync(`
@@ -40,7 +34,6 @@ export function inicializarBaseDeDatosLocal() {
   }
 }
 
-// Ejecutamos la inicialización automáticamente al importar el módulo
 inicializarBaseDeDatosLocal();
 
 export { db };
