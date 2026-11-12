@@ -5,7 +5,7 @@ import ListaLugares from "../../components/ListaLugares";
 import MapaLugares from "../../components/MapaLugares";
 import SimuladorUbicacion from "../../components/SimuladorUbicacion";
 import { useTheme } from "../../hooks/useTheme";
-import { useLocation } from "../../hooks/useLocation"; // <-- Importamos nuestro hook desacoplado
+import { useLocation } from "../../hooks/useLocation"; 
 import { obtenerLugares, obtenerCategorias } from "../../servicios/lugares";
 import { Lugar, Categoria } from "../../tipos";
 
