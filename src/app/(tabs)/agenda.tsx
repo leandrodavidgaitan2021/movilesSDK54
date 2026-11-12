@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../../hooks/useTheme";
 import axios from 'axios';
+import { obtenerEventos } from "../../servicios/eventos";
 
 const EVENTOS_COLON = [
   {
@@ -66,19 +67,17 @@ export default function AgendaScreen() {
   const [eventos, setEventos] = useState<any[]>([]);
 
   useEffect(() => {
-    const obtenerEventos = async () => {
-      try {
-        const url = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.100.6:3000/';
-        const respuesta = await axios.get(`${url}eventos`);
-        setEventos(respuesta.data);
-      } catch (error) {
-        console.error('Error al cargar los eventos:', error);
-      }
-    };
+  const cargarEventosAgenda = async () => {
+    try {
+      const data = await obtenerEventos();
+      setEventos(data);
+    } catch (error) {
+      console.error('Error al cargar los eventos:', error);
+    }
+  };
 
-    obtenerEventos();
-  }, []);
-
+  cargarEventosAgenda();
+}, []);
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Cabecera */}
