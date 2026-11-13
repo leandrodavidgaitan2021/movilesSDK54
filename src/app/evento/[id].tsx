@@ -6,6 +6,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { useTheme } from "../../hooks/useTheme";
 import { obtenerEventoPorId } from "../../servicios/eventos";
 import { obtenerLugarPorId } from "../../servicios/lugares";
+import CarruselImagenes from "../../components/CarruselImagenes"; // <-- Asegúrate de ajustar la ruta según dónde tengas guardado tu componente
 
 export default function DetalleEventoScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -39,11 +40,9 @@ export default function DetalleEventoScreen() {
     cargarDetalle();
   }, [id]);
 
-const formatearFechaHoraCompleta = (isoString: string) => {
+  const formatearFechaHoraCompleta = (isoString: string) => {
     if (!isoString) return "";
     const fechaObj = new Date(isoString);
-    
-    // Obtenemos el formato base (ej: "jueves, 14 de noviembre de 2026, 21:00")
     const fechaFormateada = fechaObj.toLocaleDateString("es-AR", {
       weekday: "long",
       year: "numeric",
@@ -52,8 +51,6 @@ const formatearFechaHoraCompleta = (isoString: string) => {
       hour: "2-digit",
       minute: "2-digit",
     });
-
-    // Ponemos la primera letra en mayúscula
     return fechaFormateada.charAt(0).toUpperCase() + fechaFormateada.slice(1);
   };
 
@@ -81,89 +78,101 @@ const formatearFechaHoraCompleta = (isoString: string) => {
     );
   }
 
+  // Preparamos las imágenes para el carrusel (si la API devuelve imagenUrl, lo transformamos en array)
+  // Nota: Si tu API devuelve una ruta relativa y necesitas concatenarla con la URL base de tu servidor, hazlo aquí (ej: `${API_URL}/${evento.imagenUrl}`)
+  const listaImagenes = evento.imagenUrl ? [evento.imagenUrl] : [];
+
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
-      {/* Botón Volver */}
-      <TouchableOpacity style={[styles.backButton, { backgroundColor: colors.card }]} onPress={() => router.back()}>
-        <Ionicons name="arrow-back" size={22} color={colors.text} />
-      </TouchableOpacity>
+    <View style={[styles.containerPrincipal, { backgroundColor: colors.background }]}>
+      {/* Componente Carrusel de Imágenes con el botón flotante de retroceso integrado */}
+      <CarruselImagenes
+        imagenes={listaImagenes}
+        colors={colors}
+        theme={theme}
+        onPressBack={() => router.back()}
+      />
 
-      {/* Cabecera / Título */}
-      <View style={styles.headerContainer}>
-        <Text style={[styles.titulo, { color: colors.text }]}>{evento.titulo}</Text>
-        
-        {evento.estado && evento.estado !== "programado" && (
-          <View style={[styles.badgeEstado, { backgroundColor: evento.estado === "cancelado" ? "#d90429" : "#ffb703" }]}>
-            <Text style={styles.textoBadge}>{evento.estado.toUpperCase()}</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Información de Fechas */}
-      <View style={[styles.seccionCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: theme === "dark" ? 1 : 0 }]}>
-        <View style={styles.rowInfo}>
-          <Ionicons name="calendar" size={18} color={colors.primary} />
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={[styles.labelInfo, { color: colors.textSecondary }]}>Inicio</Text>
-            <Text style={[styles.valorInfo, { color: colors.text }]}>{formatearFechaHoraCompleta(evento.inicio)}</Text>
-          </View>
-        </View>
-
-        {evento.fin && (
-          <View style={[styles.rowInfo, { marginTop: 12 }]}>
-            <Ionicons name="time" size={18} color={colors.primary} />
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={[styles.labelInfo, { color: colors.textSecondary }]}>Finalización</Text>
-              <Text style={[styles.valorInfo, { color: colors.text }]}>{formatearFechaHoraCompleta(evento.fin)}</Text>
+      <ScrollView style={styles.containerContenido} showsVerticalScrollIndicator={false}>
+        {/* Cabecera / Título */}
+        <View style={styles.headerContainer}>
+          <Text style={[styles.titulo, { color: colors.text }]}>{evento.titulo}</Text>
+          
+          {evento.estado && evento.estado !== "programado" && (
+            <View style={[styles.badgeEstado, { backgroundColor: evento.estado === "cancelado" ? "#d90429" : "#ffb703" }]}>
+              <Text style={styles.textoBadge}>{evento.estado.toUpperCase()}</Text>
             </View>
-          </View>
-        )}
-      </View>
-
-      {/* Ubicación */}
-      <View style={[styles.seccionCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: theme === "dark" ? 1 : 0 }]}>
-        <View style={styles.rowInfo}>
-          <Ionicons name="location" size={18} color={colors.primary} />
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={[styles.labelInfo, { color: colors.textSecondary }]}>Ubicación</Text>
-            <Text style={[styles.valorInfo, { color: colors.text }]}>
-              {evento.direccionLibre || nombreLugar || `Lugar ID: ${evento.lugarId}`}
-            </Text>
-          </View>
+          )}
         </View>
-      </View>
 
-      {/* Precio de entrada */}
-      {evento.precio !== undefined && (
+        {/* Información de Fechas */}
         <View style={[styles.seccionCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: theme === "dark" ? 1 : 0 }]}>
           <View style={styles.rowInfo}>
-            <Ionicons name="ticket" size={18} color={colors.primary} />
+            <Ionicons name="calendar" size={18} color={colors.primary} />
             <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={[styles.labelInfo, { color: colors.textSecondary }]}>Costo de Entrada</Text>
-              <Text style={[styles.valorInfo, { color: colors.primary, fontWeight: "bold" }]}>
-                {evento.precio > 0 ? `$${evento.precio}` : "Entrada Libre y Gratuita"}
+              <Text style={[styles.labelInfo, { color: colors.textSecondary }]}>Inicio</Text>
+              <Text style={[styles.valorInfo, { color: colors.text }]}>{formatearFechaHoraCompleta(evento.inicio)}</Text>
+            </View>
+          </View>
+
+          {evento.fin && (
+            <View style={[styles.rowInfo, { marginTop: 12 }]}>
+              <Ionicons name="time" size={18} color={colors.primary} />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={[styles.labelInfo, { color: colors.textSecondary }]}>Finalización</Text>
+                <Text style={[styles.valorInfo, { color: colors.text }]}>{formatearFechaHoraCompleta(evento.fin)}</Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Ubicación */}
+        <View style={[styles.seccionCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: theme === "dark" ? 1 : 0 }]}>
+          <View style={styles.rowInfo}>
+            <Ionicons name="location" size={18} color={colors.primary} />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={[styles.labelInfo, { color: colors.textSecondary }]}>Ubicación</Text>
+              <Text style={[styles.valorInfo, { color: colors.text }]}>
+                {evento.direccionLibre || nombreLugar || `Lugar ID: ${evento.lugarId}`}
               </Text>
             </View>
           </View>
         </View>
-      )}
 
-      {/* Descripción Completa */}
-      <View style={[styles.seccionCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: theme === "dark" ? 1 : 0 }]}>
-        <Text style={[styles.tituloSeccion, { color: colors.text }]}>Acerca del evento</Text>
-        <Text style={[styles.descripcion, { color: colors.textSecondary }]}>{evento.descripcion}</Text>
-      </View>
+        {/* Precio de entrada */}
+        {evento.precio !== undefined && (
+          <View style={[styles.seccionCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: theme === "dark" ? 1 : 0 }]}>
+            <View style={styles.rowInfo}>
+              <Ionicons name="ticket" size={18} color={colors.primary} />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={[styles.labelInfo, { color: colors.textSecondary }]}>Costo de Entrada</Text>
+                <Text style={[styles.valorInfo, { color: colors.primary, fontWeight: "bold" }]}>
+                  {evento.precio > 0 ? `$${evento.precio}` : "Entrada Libre y Gratuita"}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        {/* Descripción Completa */}
+        <View style={[styles.seccionCard, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: theme === "dark" ? 1 : 0 }]}>
+          <Text style={[styles.tituloSeccion, { color: colors.text }]}>Acerca del evento</Text>
+          <Text style={[styles.descripcion, { color: colors.textSecondary }]}>{evento.descripcion}</Text>
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  containerPrincipal: {
+    flex: 1,
+  },
+  containerContenido: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 50,
+    paddingTop: 16,
   },
   centrado: {
     flex: 1,
@@ -174,18 +183,6 @@ const styles = StyleSheet.create({
   textoCargando: {
     marginTop: 10,
     fontSize: 16,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
   },
   headerContainer: {
     marginBottom: 16,
