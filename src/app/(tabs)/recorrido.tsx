@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   FlatList,
   Image,
   Modal,
@@ -77,52 +78,91 @@ export default function RecorridoScreen() {
   const cargar = useCallback(async () => {
     try {
       setCargando(true);
-      const [lista, lugaresRes, cant] = await Promise.all([
+      // 1. Si hay conexión y sesión, intentamos sincronizar pendientes primero
+      if (isAuthenticated) {
+        await sincronizarColaVisitas(db);
+      }
+
+      // 2. Leemos la lista actualizada desde SQLite
+      const [lista, cant] = await Promise.all([
         obtenerVisitasConLugar(db),
-        obtenerLugares(db),
         cantidadLugaresVisitados(db),
       ]);
       setVisitas(lista);
-      setLugaresDisponibles(lugaresRes.datos);
-      setTotalLugares(lugaresRes.meta.total);
       setDistintos(cant);
+
+      try {
+        const lugaresRes = await obtenerLugares(db);
+        setLugaresDisponibles(lugaresRes.datos);
+        setTotalLugares(lugaresRes.meta.total);
+      } catch (errLugares) {
+        console.warn("No se pudieron actualizar lugares (usando caché):", errLugares);
+      }
     } catch (e) {
       console.error("Error cargando recorrido desde SQLite:", e);
     } finally {
       setCargando(false);
     }
-  }, [db]);
+  }, [db, isAuthenticated]);
 
   useFocusEffect(
     useCallback(() => {
       if (isAuthenticated) {
         cargar();
       } else {
-        setCargando(false); // Apaga el spinner si no hay sesión iniciada
+        setCargando(false);
       }
     }, [isAuthenticated, cargar])
   );
 
-  // Listener para sincronización automática al volver la señal de Internet
+  // Sincroniza automáticamente cuando vuelve Internet, cuando volvés a la app,
+  // o cada 8 segundos si quedó alguna visita en "Pendiente sync"
   useEffect(() => {
-    async function procesarSincronizacion() {
-      if (networkState.isInternetReachable && isAuthenticated && !sincronizando) {
-        try {
-          setSincronizando(true);
-          const procesadas = await sincronizarColaVisitas(db);
-          if (procesadas > 0) {
-            console.log(`Se sincronizaron automáticamente ${procesadas} visitas.`);
-            cargar();
-          }
-        } catch (error) {
-          console.warn("Error en sincronización automática:", error);
-        } finally {
-          setSincronizando(false);
+    if (!isAuthenticated) return;
+
+    const intentarSincronizar = async () => {
+      if (sincronizando) return;
+      try {
+        setSincronizando(true);
+        const procesadas = await sincronizarColaVisitas(db);
+        if (procesadas > 0) {
+          const [lista, cant] = await Promise.all([
+            obtenerVisitasConLugar(db),
+            cantidadLugaresVisitados(db),
+          ]);
+          setVisitas(lista);
+          setDistintos(cant);
         }
+      } catch (error) {
+        console.warn("Error en sincronización automática:", error);
+      } finally {
+        setSincronizando(false);
       }
+    };
+
+    // 1. Disparo inmediato si cambió la red
+    if (networkState.isInternetReachable) {
+      intentarSincronizar();
     }
-    procesarSincronizacion();
-  }, [networkState.isInternetReachable, isAuthenticated, db, cargar]);
+
+    // 2. Disparo al volver a primer plano desde el panel de Wi-Fi/Modo Avión del celular
+    const subAppState = AppState.addEventListener("change", (estado) => {
+      if (estado === "active") {
+        intentarSincronizar();
+      }
+    });
+
+    // 3. Reintento automático cada 8 segundos SOLO si hay pendientes en pantalla
+    const hayPendientes = visitas.some((v) => !v.sincronizada);
+    const intervalo = hayPendientes
+      ? setInterval(intentarSincronizar, 8000)
+      : null;
+
+    return () => {
+      subAppState.remove();
+      if (intervalo) clearInterval(intervalo);
+    };
+  }, [networkState.isInternetReachable, isAuthenticated, db, visitas]);
 
   // Guardar o actualizar visita manual en SQLite sin duplicar
   const handleRegistroManual = async (lugarId: string, nombreLugar: string) => {

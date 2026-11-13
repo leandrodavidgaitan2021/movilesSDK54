@@ -1,22 +1,15 @@
 // src/servicios/db.ts
 import * as SQLite from 'expo-sqlite';
 
-// Abre o crea la base de datos local del proyecto
-export const db = SQLite.openDatabaseSync('colon_turismo.db');
-
 /**
- * Inicializa las tablas locales en SQLite de forma asíncrona.
- * Es compatible para pasarlo en `onInit` de <SQLiteProvider> o ejecutarlo al iniciar la app.
+ * Inicializa las tablas locales en SQLite de forma asíncrona
+ * usando la instancia única provista por <SQLiteProvider onInit={...}>.
  */
-export async function inicializarBaseDeDatosLocal(database?: SQLite.SQLiteDatabase) {
-  const dbInstancia = database ?? db;
-
+export async function inicializarBaseDeDatosLocal(db: SQLite.SQLiteDatabase) {
   try {
-    // Modo WAL recomendado para optimizar lecturas/escrituras locales
-    await dbInstancia.execAsync(`PRAGMA journal_mode = 'wal';`);
+    await db.execAsync(`PRAGMA journal_mode = 'wal';`);
 
-    await dbInstancia.execAsync(`
-      -- 1. Caché de Lugares (Refleja la interfaz Lugar)
+    await db.execAsync(`
       CREATE TABLE IF NOT EXISTS lugares_cache (
         id TEXT PRIMARY KEY NOT NULL,
         nombre TEXT NOT NULL,
@@ -29,7 +22,6 @@ export async function inicializarBaseDeDatosLocal(database?: SQLite.SQLiteDataba
         dataJson TEXT NOT NULL
       );
 
-      -- 2. Caché de Categorías (Refleja la interfaz Categoria)
       CREATE TABLE IF NOT EXISTS categorias_cache (
         id TEXT PRIMARY KEY NOT NULL,
         nombre TEXT NOT NULL,
@@ -39,7 +31,6 @@ export async function inicializarBaseDeDatosLocal(database?: SQLite.SQLiteDataba
         dataJson TEXT NOT NULL
       );
 
-      -- 3. Bitácora de Visitas (Faltaba esta tabla para la pantalla Recorrido)
       CREATE TABLE IF NOT EXISTS visitas (
         id TEXT PRIMARY KEY NOT NULL,
         usuarioId TEXT NOT NULL,
@@ -52,47 +43,13 @@ export async function inicializarBaseDeDatosLocal(database?: SQLite.SQLiteDataba
       );
     `);
 
-    console.log("Base de datos SQLite local inicializada correctamente con la tabla 'visitas'.");
+    // Migraciones seguras por si la tabla visitas ya existía de una versión anterior sin estas columnas
+    try { await db.execAsync(`ALTER TABLE visitas ADD COLUMN fotoUri TEXT;`); } catch {}
+    try { await db.execAsync(`ALTER TABLE visitas ADD COLUMN nota TEXT;`); } catch {}
+    try { await db.execAsync(`ALTER TABLE visitas ADD COLUMN sincronizada INTEGER NOT NULL DEFAULT 0;`); } catch {}
+
+    console.log("SQLite inicializado correctamente.");
   } catch (error) {
     console.error("Error al inicializar las tablas en SQLite:", error);
   }
-}
-
-// Ejecutamos la creación síncrona al importar por compatibilidad inmediata
-try {
-  db.execSync(`
-    CREATE TABLE IF NOT EXISTS lugares_cache (
-      id TEXT PRIMARY KEY NOT NULL,
-      nombre TEXT NOT NULL,
-      categoriaId TEXT NOT NULL,
-      descripcionCorta TEXT,
-      precioEntrada REAL,
-      accesible INTEGER NOT NULL DEFAULT 0,
-      activo INTEGER NOT NULL DEFAULT 1,
-      actualizadoEn TEXT,
-      dataJson TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS categorias_cache (
-      id TEXT PRIMARY KEY NOT NULL,
-      nombre TEXT NOT NULL,
-      icono TEXT NOT NULL,
-      color TEXT NOT NULL,
-      orden INTEGER NOT NULL,
-      dataJson TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS visitas (
-      id TEXT PRIMARY KEY NOT NULL,
-      usuarioId TEXT NOT NULL,
-      lugarId TEXT NOT NULL,
-      fechaHora TEXT NOT NULL,
-      origen TEXT NOT NULL,
-      fotoUri TEXT,
-      nota TEXT,
-      sincronizada INTEGER NOT NULL DEFAULT 0
-    );
-  `);
-} catch (e) {
-  console.warn("Advertencia en inicialización inicial síncrona:", e);
 }

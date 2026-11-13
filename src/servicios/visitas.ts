@@ -1,7 +1,7 @@
 // src/servicios/visitas.ts
-import * as Network from 'expo-network';
 import { type SQLiteDatabase } from 'expo-sqlite';
 import { OrigenVisita, Visita } from '../tipos/visitas';
+import { api } from './api';
 
 // Interface extendida que incluye los datos del lugar
 export interface VisitaConLugar extends Visita {
@@ -16,7 +16,34 @@ export interface ResultadoRegistroVisita extends Visita {
 }
 
 /**
- * Registra una nueva visita o actualiza la existente en SQLite sin duplicar el lugar.
+ * Envía una visita al backend usando la instancia configurada de Axios.
+ * Retorna true si el servidor respondió con éxito, false si está offline o el servidor falló.
+ */
+async function enviarVisitaAApi(
+  lugarId: string,
+  origen: OrigenVisita,
+  fechaHora: string
+): Promise<boolean> {
+  try {
+    await api.post('/yo/visitas', {
+      lugarId,
+      origen,
+      fechaHora,
+    });
+    return true;
+  } catch (error: any) {
+    console.warn(
+      "Fallo POST /yo/visitas:",
+      error?.response?.status,
+      error?.response?.data ?? error?.message
+    );
+    return false;
+  }
+}
+
+/**
+ * Registra una nueva visita o actualiza la existente en SQLite sin duplicar el lugar,
+ * e intenta sincronizarla con la API si hay conexión.
  */
 export async function registrarVisita(
   db: SQLiteDatabase,
@@ -26,10 +53,11 @@ export async function registrarVisita(
   fotoUri: string | null = null,
   nota: string | null = null
 ): Promise<ResultadoRegistroVisita> {
-  const estadoRed = await Network.getNetworkStateAsync();
-  const hayConexion = (estadoRed.isConnected && estadoRed.isInternetReachable) ?? false;
   const ahora = new Date().toISOString();
   const lugarIdLimpio = lugarId.trim();
+
+  // Intentamos enviar al backend (el interceptor de api.ts ya verifica red y adjunta el Bearer token)
+  const sincronizadaConApi = await enviarVisitaAApi(lugarIdLimpio, origen, ahora);
 
   // 1. Verificar si este lugar ya existe en el recorrido (sin importar mayúsculas, espacios o origen)
   const existente = await db.getFirstAsync<{
@@ -50,7 +78,7 @@ export async function registrarVisita(
       `UPDATE visitas 
        SET usuarioId = ?, fechaHora = ?, origen = ?, fotoUri = ?, nota = ?, sincronizada = ? 
        WHERE id = ?`,
-      [usuarioId, ahora, origen, fotoFinal, notaFinal, hayConexion ? 1 : 0, existente.id]
+      [usuarioId, ahora, origen, fotoFinal, notaFinal, sincronizadaConApi ? 1 : 0, existente.id]
     );
 
     return {
@@ -61,7 +89,7 @@ export async function registrarVisita(
       origen,
       fotoUri: fotoFinal,
       nota: notaFinal,
-      sincronizada: hayConexion,
+      sincronizada: sincronizadaConApi,
       esNueva: false,
     };
   }
@@ -75,7 +103,7 @@ export async function registrarVisita(
     origen,
     fotoUri,
     nota,
-    sincronizada: hayConexion,
+    sincronizada: sincronizadaConApi,
   };
 
   await db.runAsync(
@@ -126,8 +154,6 @@ export async function obtenerVisitas(db: SQLiteDatabase): Promise<Visita[]> {
  */
 export async function obtenerVisitasConLugar(db: SQLiteDatabase): Promise<VisitaConLugar[]> {
   try {
-    // Limpieza automática de duplicados viejos que hayan quedado de pruebas anteriores
-    // (prioriza conservar el registro que tiene foto o nota)
     await db.runAsync(`
       DELETE FROM visitas
       WHERE id NOT IN (
@@ -165,7 +191,6 @@ export async function obtenerVisitasConLugar(db: SQLiteDatabase): Promise<Visita
        ORDER BY v.fechaHora DESC`
     );
 
-    // Filtro extra en memoria para garantizar 1 sola tarjeta por lugar
     const vistos = new Set<string>();
     const unicas: VisitaConLugar[] = [];
 
@@ -213,12 +238,9 @@ export async function actualizarFotoVisita(
   id: string,
   fotoUri: string
 ): Promise<void> {
-  const estadoRed = await Network.getNetworkStateAsync();
-  const hayConexion = (estadoRed.isConnected && estadoRed.isInternetReachable) ?? false;
-
   await db.runAsync(
-    'UPDATE visitas SET fotoUri = ?, sincronizada = ? WHERE id = ?',
-    [fotoUri, hayConexion ? 1 : 0, id]
+    'UPDATE visitas SET fotoUri = ?, sincronizada = 0 WHERE id = ?',
+    [fotoUri, id]
   );
 }
 
@@ -226,22 +248,21 @@ export async function actualizarFotoVisita(
  * Sincroniza las visitas pendientes con el servidor cuando hay red disponible.
  */
 export async function sincronizarColaVisitas(db: SQLiteDatabase): Promise<number> {
-  const estadoRed = await Network.getNetworkStateAsync();
-  if (!estadoRed.isInternetReachable) return 0;
-
-  const pendientes = await db.getAllAsync<{ id: string }>(
-    'SELECT id FROM visitas WHERE sincronizada = 0'
-  );
+  const pendientes = await db.getAllAsync<{
+    id: string;
+    lugarId: string;
+    origen: OrigenVisita;
+    fechaHora: string;
+  }>('SELECT id, lugarId, origen, fechaHora FROM visitas WHERE sincronizada = 0');
 
   if (pendientes.length === 0) return 0;
 
   let marcadas = 0;
   for (const item of pendientes) {
-    try {
+    const ok = await enviarVisitaAApi(item.lugarId, item.origen, item.fechaHora);
+    if (ok) {
       await db.runAsync('UPDATE visitas SET sincronizada = 1 WHERE id = ?', [item.id]);
       marcadas++;
-    } catch (e) {
-      console.warn(`Error al sincronizar la visita con ID ${item.id}:`, e);
     }
   }
 
