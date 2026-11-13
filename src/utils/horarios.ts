@@ -1,5 +1,3 @@
-// src/utils/horarios.ts
-
 const DIAS_SEMANA = [
   "Domingo",
   "Lunes",
@@ -26,7 +24,7 @@ export function agruparHorarios(horarios: HorarioItem[]): HorarioAgrupado[] {
     return [{ textoDias: "Todos los días", hora: "Cerrado" }];
   }
 
-  // 1. Mapeamos los 7 días de la semana (0 a 6)
+  // con esto mapeamos los 7 días de la semana (0 a 6)
   const mapaDias: { [dia: number]: string[] } = {};
   for (let d = 0; d <= 6; d++) {
     mapaDias[d] = [];
@@ -39,7 +37,7 @@ export function agruparHorarios(horarios: HorarioItem[]): HorarioAgrupado[] {
     }
   });
 
-  // Definimos explícitamente la interfaz o tipo para el array
+  // con esto definimos la interfaz o tipo para el array
   interface DiaProcesado {
     dia: number;
     horasTexto: string;
@@ -55,13 +53,13 @@ export function agruparHorarios(horarios: HorarioItem[]): HorarioAgrupado[] {
     diasProcesados.push({ dia: d, horasTexto });
   }
 
-  // 2. Reordenamos el array para que empiece desde el Lunes (1) hasta el Domingo (0)
+  // Con esto reordenamos el array para que empiece desde el Lunes (1) hasta el Domingo (0)
   const ordenLogico = [1, 2, 3, 4, 5, 6, 0];
   const diasOrdenados: DiaProcesado[] = ordenLogico.map(
     (d) => diasProcesados.find((item) => item.dia === d)!
   );
 
-  // 3. Agrupamos días consecutivos que comparten exactamente los mismos horarios
+  // Con esto agrupamos días consecutivos que comparten exactamente los mismos horarios
   const agrupados: HorarioAgrupado[] = [];
   let inicioGrupo = diasOrdenados[0].dia;
   let finGrupo = diasOrdenados[0].dia;
@@ -88,7 +86,7 @@ export function agruparHorarios(horarios: HorarioItem[]): HorarioAgrupado[] {
     }
   }
 
-  // Añadir el último grupo pendiente
+  // con esto añadimos el último grupo pendiente
   agrupados.push({
     textoDias: formatearRangoDiasSecuencia(inicioGrupo, finGrupo),
     hora: horaActual,

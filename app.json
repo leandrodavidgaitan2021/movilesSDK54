@@ -11,8 +11,7 @@
       "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSCameraUsageDescription": "Necesitamos acceso a la cámara para que puedas escanear los códigos QR ubicados en los diferentes puntos turísticos de Colón.",
-        "NSLocationWhenInUseUsageDescription": "Utilizamos tu ubicación para mostrarte los atractivos turísticos, playas y alojamientos más cercanos a ti en tiempo real.",
-        "NSPhotoLibraryUsageDescription": "Permite seleccionar fotos de tu galería para adjuntarlas a tus visitas registradas."
+        "NSLocationWhenInUseUsageDescription": "Utilizamos tu ubicación para mostrarte los atractivos turísticos, playas y alojamientos más cercanos a ti en tiempo real."
       }
     },
     "android": {
@@ -27,8 +26,7 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.READ_EXTERNAL_STORAGE"
+        "android.permission.ACCESS_COARSE_LOCATION"
       ],
       "package": "com.anonymous.colonturismo"
     },
@@ -59,9 +57,9 @@
         }
       ],
       [
-        "expo-image-picker",
+        "expo-local-authentication",
         {
-          "photosPermission": "Permite seleccionar fotos de tu galería para adjuntarlas a tu recorrido turistico."
+          "faceIDPermission": "Permite usar Face ID para ingresar de forma rápida."
         }
       ],
       "expo-secure-store",

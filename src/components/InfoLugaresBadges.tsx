@@ -1,4 +1,3 @@
-// src/components/InfoLugaresBadges.tsx
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -60,7 +59,11 @@ export default function InfoLugaresBadges({
 }
 
 const styles = StyleSheet.create({
-  infoRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  infoRow: { 
+    flexDirection: "row", 
+    gap: 8, 
+    marginBottom: 14 
+  },
   infoBadge: {
     flex: 1,
     flexDirection: "row",
@@ -69,5 +72,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 6,
   },
-  infoBadgeText: { fontSize: 12, fontWeight: "500" },
+  infoBadgeText: { 
+    fontSize: 12, 
+    fontWeight: "500" 
+  },
 });

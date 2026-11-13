@@ -57,21 +57,15 @@ export default function SimuladorUbicacion({
       <View style={styles.chipsRow}>
         <TouchableOpacity
           style={styles.chip}
+          onPress={() => onCambiarCoordenadas(-32.21568, -58.13649)}
+        >
+          <Text style={styles.chipText}>Oficina de Turismo</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.chip}
           onPress={() => onCambiarCoordenadas(-32.2214, -58.1381)}
         >
           <Text style={styles.chipText}>Centro / Plaza</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.chip}
-          onPress={() => onCambiarCoordenadas(-32.235, -58.142)}
-        >
-          <Text style={styles.chipText}>Termas Colón</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.chip}
-          onPress={() => onCambiarCoordenadas(-32.2135, -58.1455)}
-        >
-          <Text style={styles.chipText}>Costanera</Text>
         </TouchableOpacity>
       </View>
 

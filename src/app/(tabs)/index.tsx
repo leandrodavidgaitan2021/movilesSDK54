@@ -381,7 +381,7 @@ export default function PantallaInicio() {
 
       {/* 2. Mapa */}
       <View style={styles.mapaContainer}>
-        <MapaLugares ubicacionActual={ubicacionActual} lugares={lugaresFiltrados} />
+        <MapaLugares  lugares={lugaresFiltrados} />
       </View>
 
       {/* 3. Lista de lugares y filtros */}

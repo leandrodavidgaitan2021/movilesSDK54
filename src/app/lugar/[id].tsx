@@ -58,19 +58,20 @@ export default function DetalleLugarScreen() {
           if (lugarData) {
             setLugar(lugarData);
 
-            // Verificar si ya existe una visita previa para precargar foto y nota
-            const visitas = await obtenerVisitas(db);
-            const usuarioActual = user ?? "usr-201";
-            const visitaPrevia = visitas.find(
-              (v) =>
-                v.usuarioId === usuarioActual &&
-                v.lugarId.toLowerCase() === lugarData.id.toLowerCase()
-            );
+            // Verificar si ya existe una visita previa del usuario autenticado
+            if (user) {
+              const visitas = await obtenerVisitas(db);
+              const visitaPrevia = visitas.find(
+                (v) =>
+                  v.usuarioId === user &&
+                  v.lugarId.toLowerCase() === lugarData.id.toLowerCase()
+              );
 
-            if (visitaPrevia) {
-              setYaVisitado(true);
-              if (visitaPrevia.fotoUri) setFotoUri(visitaPrevia.fotoUri);
-              if (visitaPrevia.nota) setNota(visitaPrevia.nota);
+              if (visitaPrevia) {
+                setYaVisitado(true);
+                if (visitaPrevia.fotoUri) setFotoUri(visitaPrevia.fotoUri);
+                if (visitaPrevia.nota) setNota(visitaPrevia.nota);
+              }
             }
           }
         }
@@ -88,17 +89,18 @@ export default function DetalleLugarScreen() {
 
   useEffect(() => {
     async function verificarFavorito() {
-      if (typeof id === "string" && user) {
-        const favorito = await esFavorito(user, id);
+      if (lugar?.id && user) {
+        const favorito = await esFavorito(user, lugar.id);
         setEsFav(favorito);
       } else {
         setEsFav(false);
       }
     }
     verificarFavorito();
-  }, [id, user]);
+  }, [lugar?.id, user]);
 
   async function cambiarEstrella() {
+    if (!lugar) return;
     if (!user) {
       Alert.alert(
         "Iniciá sesión para guardar en favoritos",
@@ -110,7 +112,7 @@ export default function DetalleLugarScreen() {
             onPress: () =>
               router.push({
                 pathname: "/login",
-                params: { redirect: `/lugar/${id}` },
+                params: { redirect: `/lugar/${lugar.id}` },
               }),
           },
         ]
@@ -118,10 +120,8 @@ export default function DetalleLugarScreen() {
       return;
     }
 
-    if (typeof id === "string") {
-      const nuevoEstado = await cambiarFavorito(user, id);
-      setEsFav(nuevoEstado);
-    }
+    const nuevoEstado = await cambiarFavorito(user, lugar.id);
+    setEsFav(nuevoEstado);
   }
 
   function abrirGoogleMaps() {
@@ -196,13 +196,31 @@ export default function DetalleLugarScreen() {
   // Guardar o actualizar Visita con Foto y Nota en SQLite sin duplicar el lugar
   const handleGuardarVisitaManual = async () => {
     if (!lugar) return;
+    if (!user) {
+      Alert.alert(
+        "Iniciá sesión para registrar visitas",
+        "Podés explorar todos los lugares libremente, pero necesitás tu cuenta para guardar visitas y fotos en Mi Recorrido.",
+        [
+          { text: "Ahora no", style: "cancel" },
+          {
+            text: "Iniciar sesión",
+            onPress: () =>
+              router.push({
+                pathname: "/login",
+                params: { redirect: `/lugar/${lugar.id}` },
+              }),
+          },
+        ]
+      );
+      return;
+    }
+
     try {
       setGuardandoVisita(true);
-      const usuarioIdActual = user ?? "usr-201";
 
       const resultado = await registrarVisita(
         db,
-        usuarioIdActual,
+        user,
         lugar.id,
         "manual",
         fotoUri,

@@ -1,4 +1,3 @@
-// src/components/ReproductorAudio.tsx
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -15,29 +14,22 @@ interface Props {
 export default function ReproductorAudio({ audioguia, colors }: Props) {
   if (!audioguia || !audioguia.url) return null;
 
-  const apiBaseUrl = process.env.EXPO_PUBLIC_API_URL || "http://192.168.1.10:3000";
+  const apiBaseUrl = process.env.EXPO_PUBLIC_API_URL;
 
   const audioUrl = audioguia.url.startsWith("http")
     ? audioguia.url
     : `${apiBaseUrl}${audioguia.url.startsWith("/") ? "" : "/"}${audioguia.url}`;
 
-  // Pasamos la URL como objeto { uri } y configuramos el updateInterval
 
   const player = useAudioPlayer({ uri: audioUrl }, {
     downloadFirst: true,
-    updateInterval: 500, // Actualiza el estado cada medio segundo
+    updateInterval: 500, 
   });
-  /*
-const player = useAudioPlayer({ uri: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" }, {
-  downloadFirst: true,
-  updateInterval: 500,
-});
-*/
+
   const status = useAudioPlayerStatus(player);
 
   const estaReproduciendo = status.playing;
   
-  // ⚠️ EN EXPO-AUDIO LOS TIEMPOS VIENEN EN SEGUNDOS DIRECTAMENTE (NO EN MILISEGUNDOS)
   const posicionAudio = Math.floor(status.currentTime || 0);
   const duracionAudio = Math.floor(status.duration || 0) || audioguia.duracionSegundos || 0;
 

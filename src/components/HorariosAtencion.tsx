@@ -1,4 +1,3 @@
-// src/components/HorariosAtencion.tsx
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { agruparHorarios } from "../utils/horarios";
@@ -41,14 +40,30 @@ export default function HorariosAtencion({ horarios, colors }: Props) {
 }
 
 const styles = StyleSheet.create({
-  section: { marginBottom: 14 },
-  sectionTitle: { fontSize: 15, fontWeight: "bold", marginBottom: 6 },
-  horariosContainer: { padding: 10, borderRadius: 8, borderWidth: 1 },
+  section: { 
+    marginBottom: 14 
+  },
+  sectionTitle: { 
+    fontSize: 15,
+    fontWeight: "bold", 
+    marginBottom: 6 
+  },
+  horariosContainer: { 
+    padding: 10,
+    borderRadius: 8, 
+    borderWidth: 1 
+  },
   horarioRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 3,
   },
-  horarioDia: { fontSize: 12, fontWeight: "500" },
-  horarioHora: { fontSize: 12, fontWeight: "bold" },
+  horarioDia: { 
+    fontSize: 12, 
+    fontWeight: "500" 
+  },
+  horarioHora: { 
+    fontSize: 12, 
+    fontWeight: "bold" 
+  },
 });
