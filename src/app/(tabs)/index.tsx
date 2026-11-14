@@ -1,6 +1,5 @@
 // src/app/(tabs)/index.tsx
 import { Ionicons } from "@expo/vector-icons";
-import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
 import { useEffect, useMemo, useState } from "react";
@@ -17,6 +16,7 @@ import ListaLugares from "../../components/ListaLugares";
 import MapaLugares from "../../components/MapaLugares";
 import SimuladorUbicacion from "../../components/SimuladorUbicacion";
 import { useAuth } from "../../hooks/useAuth";
+import { useLocation } from "../../hooks/useLocation";
 import { useTheme } from "../../hooks/useTheme";
 import { obtenerCategorias, obtenerLugares } from "../../servicios/lugares";
 import { obtenerVisitas, registrarVisita } from "../../servicios/visitas";
@@ -49,62 +49,34 @@ export default function PantallaInicio() {
   const db = useSQLiteContext();
   const router = useRouter();
 
+  // Consumimos la ubicación global desde el LocationContext
+  const {
+    ubicacionActual,
+    cambiarCoordenadasManual,
+    activarGpsReal,
+    inputLat,
+    inputLon,
+    setInputLat,
+    setInputLon,
+  } = useLocation();
+
   const [lugares, setLugares] = useState<Lugar[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
 
-  // Ubicación actual (por defecto Colón, Entre Ríos)
-  const [ubicacionActual, setUbicacionActual] = useState<{
-    latitud: number;
-    longitud: number;
-  }>({
-    latitud: -32.21568,
-    longitud: -58.13649,
-  });
-
   // Estados para el Simulador de Ubicación
   const [mostrarSimulador, setMostrarSimulador] = useState<boolean>(false);
-  const [inputLat, setInputLat] = useState<string>("-32.21568");
-  const [inputLon, setInputLon] = useState<string>("-58.13649");
 
   const [busquedaTexto, setBusquedaTexto] = useState<string>("");
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>("Todos");
   const [mostrarFiltrosExtra, setMostrarFiltrosExtra] = useState<boolean>(false);
 
-  // Control para aviso de proximidad (máximo 1 aviso por lugar y por día)
+  // Control para aviso de proximidad
   const [lugaresVisitadosIds, setLugaresVisitadosIds] = useState<Set<string>>(new Set());
   const [avisosDescartadosHoy, setAvisosDescartadosHoy] = useState<Set<string>>(new Set());
   const [registrandoGps, setRegistrandoGps] = useState<boolean>(false);
 
-  // 1. Obtener ubicación real por GPS al iniciar
-  useEffect(() => {
-    async function obtenerUbicacionGPS() {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          console.warn("Permiso de ubicación denegado. Usando ubicación por defecto.");
-          return;
-        }
-
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-
-        const lat = location.coords.latitude;
-        const lon = location.coords.longitude;
-
-        setUbicacionActual({ latitud: lat, longitud: lon });
-        setInputLat(lat.toString());
-        setInputLon(lon.toString());
-      } catch (error) {
-        console.error("Error al obtener la ubicación del GPS:", error);
-      }
-    }
-
-    obtenerUbicacionGPS();
-  }, []);
-
-  // 2. Inicializar datos del backend y visitas previas
+  // Inicializar datos del backend y visitas previas
   useEffect(() => {
     async function inicializar() {
       try {
@@ -134,9 +106,11 @@ export default function PantallaInicio() {
     inicializar();
   }, [db]);
 
-  // Detectar el lugar más cercano dentro del radio de 150 metros que aún no fue visitado ni descartado hoy
+  // --- TODOS LOS HOOKS (useMemo, etc.) DEBEN ESTAR ANTES DE CUALQUIER RETURN ---
+
+  // Detectar el lugar más cercano dentro del radio de 150 metros
   const lugarCercanoDetectado = useMemo(() => {
-    if (lugares.length === 0) return null;
+    if (!ubicacionActual || lugares.length === 0) return null;
 
     let masCercano: { lugar: Lugar; distancia: number } | null = null;
 
@@ -162,6 +136,53 @@ export default function PantallaInicio() {
 
     return masCercano;
   }, [lugares, ubicacionActual, lugaresVisitadosIds, avisosDescartadosHoy]);
+
+  const lugaresFiltrados = useMemo(() => {
+    const filtrados = lugares.filter((lugar) => {
+      const coincideNombre = lugar.nombre
+        .toLowerCase()
+        .includes(busquedaTexto.toLowerCase());
+
+      if (categoriaSeleccionada === "Todos") {
+        return coincideNombre;
+      }
+
+      const coincideCategoria = lugar.categoriaId === categoriaSeleccionada;
+      return coincideNombre && coincideCategoria;
+    });
+
+    if (!ubicacionActual) return filtrados;
+
+    return [...filtrados].sort((a, b) => {
+      const distanciaA = calcularDistancia(
+        ubicacionActual.latitud,
+        ubicacionActual.longitud,
+        a.coordenadas.latitud,
+        a.coordenadas.longitud
+      );
+      const distanciaB = calcularDistancia(
+        ubicacionActual.latitud,
+        ubicacionActual.longitud,
+        b.coordenadas.latitud,
+        b.coordenadas.longitud
+      );
+      return distanciaA - distanciaB;
+    });
+  }, [lugares, busquedaTexto, categoriaSeleccionada, ubicacionActual]);
+
+  // --- FIN DE LOS HOOKS ---
+
+  // Si está cargando o la ubicación GPS aún no llega, mostramos el indicador de forma segura
+  if (cargando || !ubicacionActual) {
+    return (
+      <View style={[styles.centrado, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.textoCargando, { color: colors.textSecondary }]}>
+          Cargando Guía Turística y GPS...
+        </Text>
+      </View>
+    );
+  }
 
   // Registrar visita por proximidad física ("gps")
   const handleRegistrarPorProximidad = async () => {
@@ -211,13 +232,6 @@ export default function PantallaInicio() {
     setAvisosDescartadosHoy((prev) => new Set(prev).add(lugarId.trim().toLowerCase()));
   };
 
-  // Funciones del simulador
-  const cambiarCoordenadasManual = (lat: number, lon: number) => {
-    setUbicacionActual({ latitud: lat, longitud: lon });
-    setInputLat(lat.toString());
-    setInputLon(lon.toString());
-  };
-
   const aplicarCoordenadasInputs = () => {
     const latNum = parseFloat(inputLat);
     const lonNum = parseFloat(inputLon);
@@ -227,63 +241,8 @@ export default function PantallaInicio() {
       return;
     }
 
-    setUbicacionActual({ latitud: latNum, longitud: lonNum });
+    cambiarCoordenadasManual(latNum, lonNum);
   };
-
-  const activarGpsReal = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permiso denegado", "No se pudo acceder a los permisos de ubicación.");
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const lat = location.coords.latitude;
-      const lon = location.coords.longitude;
-
-      setUbicacionActual({ latitud: lat, longitud: lon });
-      setInputLat(lat.toString());
-      setInputLon(lon.toString());
-      Alert.alert("GPS Activado", "Ubicación real sincronizada correctamente.");
-    } catch  {
-      Alert.alert("Error", "No se pudo obtener la posición actual del GPS.");
-    }
-  };
-
-  const lugaresFiltrados = useMemo(() => {
-    const filtrados = lugares.filter((lugar) => {
-      const coincideNombre = lugar.nombre
-        .toLowerCase()
-        .includes(busquedaTexto.toLowerCase());
-
-      if (categoriaSeleccionada === "Todos") {
-        return coincideNombre;
-      }
-
-      const coincideCategoria = lugar.categoriaId === categoriaSeleccionada;
-      return coincideNombre && coincideCategoria;
-    });
-
-    return [...filtrados].sort((a, b) => {
-      const distanciaA = calcularDistancia(
-        ubicacionActual.latitud,
-        ubicacionActual.longitud,
-        a.coordenadas.latitud,
-        a.coordenadas.longitud
-      );
-      const distanciaB = calcularDistancia(
-        ubicacionActual.latitud,
-        ubicacionActual.longitud,
-        b.coordenadas.latitud,
-        b.coordenadas.longitud
-      );
-      return distanciaA - distanciaB;
-    });
-  }, [lugares, busquedaTexto, categoriaSeleccionada, ubicacionActual]);
 
   const limpiarFiltros = () => {
     setBusquedaTexto("");
@@ -295,17 +254,6 @@ export default function PantallaInicio() {
     setCategoriaSeleccionada(cat);
     setMostrarFiltrosExtra(false);
   };
-
-  if (cargando) {
-    return (
-      <View style={[styles.centrado, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.textoCargando, { color: colors.textSecondary }]}>
-          Cargando Guía Turística y GPS...
-        </Text>
-      </View>
-    );
-  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -334,7 +282,7 @@ export default function PantallaInicio() {
         onGpsReal={activarGpsReal}
       />
 
-      {/* Banner de Proximidad Física ("estando físicamente cerca") */}
+      {/* Banner de Proximidad Física */}
       {lugarCercanoDetectado && (
         <View
           style={[
@@ -381,7 +329,7 @@ export default function PantallaInicio() {
 
       {/* 2. Mapa */}
       <View style={styles.mapaContainer}>
-        <MapaLugares  lugares={lugaresFiltrados} />
+        <MapaLugares lugares={lugaresFiltrados} />
       </View>
 
       {/* 3. Lista de lugares y filtros */}
