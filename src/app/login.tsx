@@ -2,6 +2,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
   Alert,
@@ -36,6 +37,10 @@ export default function LoginScreen() {
   const { redirect } = useLocalSearchParams<{ redirect?: string }>();
   const { login } = useAuth();
   const { colors } = useTheme();
+  
+  // Estado para controlar la visibilidad de la contraseña (el "ojito")
+  const [showPassword, setShowPassword] = useState(false);
+
   const {
     disponible: hayBiometria,
     sensor,
@@ -161,27 +166,46 @@ export default function LoginScreen() {
           <Text style={styles.errorText}>{errors.email.message}</Text>
         )}
 
-        {/* Input de Contraseña */}
+        {/* Input de Contraseña con el Ojito integrado */}
         <Controller
           control={control}
           name="password"
           render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
+            <View
               style={[
-                styles.input,
+                styles.passwordContainer,
                 {
                   backgroundColor: colors.card,
-                  color: colors.text,
                   borderColor: colors.border,
                 },
               ]}
-              placeholder="Contraseña"
-              placeholderTextColor={colors.textSecondary}
-              secureTextEntry
-              onBlur={onBlur}
-              value={value}
-              onChangeText={onChange}
-            />
+            >
+              <TextInput
+                style={[
+                  styles.passwordInput,
+                  {
+                    color: colors.text,
+                  },
+                ]}
+                placeholder="Contraseña"
+                placeholderTextColor={colors.textSecondary}
+                secureTextEntry={!showPassword}
+                onBlur={onBlur}
+                value={value}
+                onChangeText={onChange}
+              />
+              <TouchableOpacity
+                style={styles.eyeIcon}
+                onPress={() => setShowPassword(!showPassword)}
+                accessibilityLabel="Mostrar u ocultar contraseña"
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off" : "eye"}
+                  size={22}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
           )}
         />
         {errors.password && (
@@ -266,6 +290,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     marginBottom: 5,
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 5,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+  },
+  eyeIcon: {
+    paddingHorizontal: 14,
   },
   errorText: {
     color: "#e74c3c",
