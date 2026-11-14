@@ -2,6 +2,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store"; // <-- 1. Importación obligatoria para la cátedra
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
   KeyboardAvoidingView,
@@ -13,45 +15,64 @@ import {
   View,
 } from "react-native";
 import * as z from "zod";
-import { useAuth } from "../hooks/useAuth"; // <-- Importamos el hook del contexto
+import { useAuth } from "../hooks/useAuth";
 
-// 1. Esquema de validación con Zod para el registro
-const registerSchema = z.object({
-  nombre: z.string().min(1, "El nombre completo es requerido"),
-  email: z
-    .string()
-    .min(1, "El correo es requerido")
-    .email("Correo electrónico inválido"),
-  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
-});
+// 2. Esquema de validación con Zod mejorado
+const registerSchema = z
+  .object({
+    nombre: z.string().min(1, "El nombre completo es requerido"),
+    email: z
+      .string()
+      .min(1, "El correo es requerido")
+      .email("Correo electrónico inválido")
+      .transform((val) => val.trim().toLowerCase()), // <--- Razón: Limpia espacios y pasa a minúsculas para evitar rechazos en el servidor.
+    password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
+    confirmPassword: z.string().min(1, "Debes confirmar tu contraseña"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Las contraseñas no coinciden", // <--- Razón: Asegura que el usuario no cometa errores tipográficos al registrarse.
+    path: ["confirmPassword"],
+  });
 
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { login } = useAuth(); // <-- Extraemos la función login del contexto global
+  const { login } = useAuth();
 
-  // 2. Configuración de react-hook-form
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const {
     control,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       nombre: "",
       email: "",
       password: "",
+      confirmPassword: "",
     },
   });
 
-  // 3. Función al enviar el formulario con éxito
-  const handleRegister = (data: RegisterFormData) => {
-    // Guardamos la sesión directamente en el Contexto Global (sin AsyncStorage)
-    const tokenDelServidor = "jwt_token_generado_por_el_backend_123";
-    login(data.email, tokenDelServidor);
-    alert(`¡Registro exitoso! Bienvenido, ${data.nombre}`);
-    router.replace("/(tabs)/perfil");
+  // 3. Función al enviar el formulario con seguridad exigida por cátedra
+  const handleRegister = async (data: RegisterFormData) => {
+    try {
+      const tokenDelServidor = "jwt_token_generado_por_el_backend_123";
+
+      // <--- REQUISITO DE CÁTEDRA: Resguardo cifrado de credenciales
+      await SecureStore.setItemAsync("user_token", tokenDelServidor);
+      await SecureStore.setItemAsync("user_email", data.email);
+
+      login(data.email, tokenDelServidor);
+      alert(`¡Registro exitoso! Bienvenido, ${data.nombre}`);
+      router.replace("/(tabs)/perfil");
+    } catch (error) {
+      console.error("Error al guardar la sesión de registro:", error);
+      alert("Ocurrió un error al guardar las credenciales de forma segura.");
+    }
   };
 
   return (
@@ -88,7 +109,7 @@ export default function RegisterScreen() {
           <Text style={styles.errorText}>{errors.nombre.message}</Text>
         )}
 
-        {/* Input de Correo */}
+        {/* Input de Correo con sanitización */}
         <Controller
           control={control}
           name="email"
@@ -110,31 +131,78 @@ export default function RegisterScreen() {
           <Text style={styles.errorText}>{errors.email.message}</Text>
         )}
 
-        {/* Input de Contraseña */}
-        <Controller
-          control={control}
-          name="password"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              style={styles.input}
-              placeholder="Contraseña (mínimo 8 caracteres)"
-              placeholderTextColor="#aaa"
-              secureTextEntry
-              onBlur={onBlur}
-              value={value}
-              onChangeText={onChange}
+        {/* Input de Contraseña con el Ojito */}
+        <View style={styles.passwordContainer}>
+          <Controller
+            control={control}
+            name="password"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Contraseña (mínimo 8 caracteres)"
+                placeholderTextColor="#aaa"
+                secureTextEntry={!showPassword}
+                onBlur={onBlur}
+                value={value}
+                onChangeText={onChange}
+              />
+            )}
+          />
+          <TouchableOpacity
+            style={styles.eyeIcon}
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            <Ionicons
+              name={showPassword ? "eye-off" : "eye"}
+              size={22}
+              color="#7f8c8d"
             />
-          )}
-        />
+          </TouchableOpacity>
+        </View>
         {errors.password && (
           <Text style={styles.errorText}>{errors.password.message}</Text>
         )}
 
+        {/* Input de Confirmar Contraseña con su propio Ojito */}
+        <View style={styles.passwordContainer}>
+          <Controller
+            control={control}
+            name="confirmPassword"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Repetir contraseña"
+                placeholderTextColor="#aaa"
+                secureTextEntry={!showConfirmPassword}
+                onBlur={onBlur}
+                value={value}
+                onChangeText={onChange}
+              />
+            )}
+          />
+          <TouchableOpacity
+            style={styles.eyeIcon}
+            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+          >
+            <Ionicons
+              name={showConfirmPassword ? "eye-off" : "eye"}
+              size={22}
+              color="#7f8c8d"
+            />
+          </TouchableOpacity>
+        </View>
+        {errors.confirmPassword && (
+          <Text style={styles.errorText}>{errors.confirmPassword.message}</Text>
+        )}
+
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, isSubmitting && { opacity: 0.7 }]}
           onPress={handleSubmit(handleRegister)}
+          disabled={isSubmitting}
         >
-          <Text style={styles.buttonText}>Registrarse</Text>
+          <Text style={styles.buttonText}>
+            {isSubmitting ? "Registrando..." : "Registrarse"}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -189,6 +257,25 @@ const styles = StyleSheet.create({
     borderColor: "#e0e0e0",
     marginBottom: 5,
     color: "#333",
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    marginBottom: 5,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: "#333",
+  },
+  eyeIcon: {
+    paddingHorizontal: 14,
   },
   errorText: {
     color: "#e74c3c",
