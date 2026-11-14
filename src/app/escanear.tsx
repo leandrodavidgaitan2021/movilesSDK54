@@ -2,15 +2,21 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useRouter } from "expo-router";
+import { useSQLiteContext } from "expo-sqlite";
 import { useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../hooks/useTheme";
+import { obtenerLugarPorId } from "../servicios/lugares";
+import { registrarVisita } from "../servicios/visitas";
 
 export default function EscanearScreen() {
+  const db = useSQLiteContext();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState<boolean>(false);
   const router = useRouter();
   const { colors } = useTheme();
+  const { user } = useAuth();
 
   // Si los permisos aún se están cargando
   if (!permission) {
@@ -63,12 +69,69 @@ export default function EscanearScreen() {
     );
   }
 
-  const handleBarCodeScanned = ({ data }: { data: string }) => {
-    if (scanned) return;
+  const handleBarCodeScanned = async ({ data }: { data: string }) => {
+    if (scanned) return; // Evita múltiples escaneos continuos
     setScanned(true);
 
-    // Redirige directamente a la pantalla de detalle del lugar con el ID escaneado
-    router.replace(`/lugar/${data}`);
+    // 1. Limpiamos espacios en blanco y llevamos a mayúsculas
+    const dataLimpia = data ? data.trim().toUpperCase() : "";
+
+    // 2. Validación anti-crash
+    if (!dataLimpia.startsWith("COLON:")) {
+      Alert.alert(
+        "Código QR no válido",
+        "El código escaneado no pertenece a los carteles turísticos oficiales de Colón.",
+        [
+          {
+            text: "Reintentar",
+            onPress: () => setScanned(false),
+          },
+        ]
+      );
+      return;
+    }
+
+    // Extraer el id del lugar (ejemplo: "COLON:LUG-004" -> "lug-004")
+    const lugarId = dataLimpia.replace("COLON:", "").trim().toLowerCase();
+
+    try {
+      // Buscamos el nombre del lugar para mostrarlo en el cartel
+      const lugarData = await obtenerLugarPorId(lugarId, db);
+      const nombreLugar = lugarData?.nombre ?? lugarId;
+      const usuarioIdActual = typeof user === "string" ? user : "usr-201";
+
+      // 3. Registrar o actualizar visita en SQLite sin duplicar
+      const resultado = await registrarVisita(
+        db,
+        usuarioIdActual,
+        lugarId,
+        "qr",
+        null,
+        null // Conservar foto o nota previa si ya existía
+      );
+
+      Alert.alert(
+        resultado.esNueva ? "¡Lugar registrado!" : "Lugar ya en tu recorrido",
+        resultado.esNueva
+          ? `Has agregado ${nombreLugar} a tu bitácora. ¿Deseas agregarle una foto ahora?`
+          : `${nombreLugar} ya estaba en tu recorrido. Se actualizó la fecha y puedes cargarle nuevas fotos desde su ficha.`,
+        [
+          {
+            text: "CERRAR",
+            style: "cancel",
+            onPress: () => router.replace("/(tabs)/recorrido"),
+          },
+          {
+            text: "IR A CARGAR FOTO",
+            onPress: () => router.replace(`/lugar/${lugarId}`),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Error crítico al guardar la visita en SQLite:", error);
+      Alert.alert("Error", "No se pudo guardar la visita en la base de datos.");
+      setScanned(false);
+    }
   };
 
   return (
@@ -76,7 +139,7 @@ export default function EscanearScreen() {
       <CameraView
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
         barcodeScannerSettings={{
-          barcodeTypes: ["qr"], // Limitado estrictamente a códigos QR
+          barcodeTypes: ["qr"],
         }}
         style={StyleSheet.absoluteFill}
       />

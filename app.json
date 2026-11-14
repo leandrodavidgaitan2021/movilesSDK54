@@ -8,7 +8,7 @@
     "scheme": "colonturismo",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "infoPlist": {
         "NSCameraUsageDescription": "Necesitamos acceso a la cámara para que puedas escanear los códigos QR ubicados en los diferentes puntos turísticos de Colón.",
         "NSLocationWhenInUseUsageDescription": "Utilizamos tu ubicación para mostrarte los atractivos turísticos, playas y alojamientos más cercanos a ti en tiempo real."
