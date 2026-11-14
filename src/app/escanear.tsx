@@ -1,7 +1,7 @@
 // src/app/escanear.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
 import { useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -17,6 +17,10 @@ export default function EscanearScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const { user } = useAuth();
+
+  // Recibimos el parámetro 'modo' pasada por la URL (por defecto será 'visita')
+  const { modo } = useLocalSearchParams<{ modo?: string }>();
+  const esModoVer = modo === "ver";
 
   // Si los permisos aún se están cargando
   if (!permission) {
@@ -95,19 +99,35 @@ export default function EscanearScreen() {
     const lugarId = dataLimpia.replace("COLON:", "").trim().toLowerCase();
 
     try {
-      // Buscamos el nombre del lugar para mostrarlo en el cartel
+      // Validamos si el lugar existe en la base de datos local
       const lugarData = await obtenerLugarPorId(lugarId, db);
       const nombreLugar = lugarData?.nombre ?? lugarId;
+
+      if (!lugarData) {
+        Alert.alert(
+          "Lugar no encontrado",
+          "El código QR es válido pero el lugar no está registrado en la base de datos.",
+          [{ text: "Reintentar", onPress: () => setScanned(false) }]
+        );
+        return;
+      }
+
+      // --- CASO A: ESCANEAR PARA VER LA FICHA DEL LUGAR ---
+      if (esModoVer) {
+        router.replace(`/lugar/${lugarId}`);
+        return;
+      }
+
+      // --- CASO B: ESCANEAR PARA REGISTRAR VISITA (EN RECORRIDO) ---
       const usuarioIdActual = typeof user === "string" ? user : "usr-201";
 
-      // 3. Registrar o actualizar visita en SQLite sin duplicar
       const resultado = await registrarVisita(
         db,
         usuarioIdActual,
         lugarId,
         "qr",
         null,
-        null // Conservar foto o nota previa si ya existía
+        null
       );
 
       Alert.alert(
@@ -128,8 +148,8 @@ export default function EscanearScreen() {
         ]
       );
     } catch (error) {
-      console.error("Error crítico al guardar la visita en SQLite:", error);
-      Alert.alert("Error", "No se pudo guardar la visita en la base de datos.");
+      console.error("Error crítico al procesar el código QR:", error);
+      Alert.alert("Error", "No se pudo procesar la información del código QR.");
       setScanned(false);
     }
   };
@@ -152,9 +172,18 @@ export default function EscanearScreen() {
         <Ionicons name="close" size={24} color="#fff" />
       </TouchableOpacity>
 
+      {/* Indicador visual del modo activo */}
       <View style={styles.overlay}>
+        <Ionicons
+          name={esModoVer ? "eye-outline" : "qr-code-outline"}
+          size={18}
+          color="#fff"
+          style={{ marginRight: 6 }}
+        />
         <Text style={styles.overlayText}>
-          Apunta al código QR del tótem turístico
+          {esModoVer
+            ? "Modo: Escanear para ver Ficha"
+            : "Modo: Escanear para Registrar Visita"}
         </Text>
       </View>
     </View>
@@ -185,6 +214,8 @@ const styles = StyleSheet.create({
   overlay: {
     position: "absolute",
     bottom: 60,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.7)",
     paddingVertical: 12,
     paddingHorizontal: 20,
@@ -193,6 +224,7 @@ const styles = StyleSheet.create({
   overlayText: {
     color: "#fff",
     fontSize: 14,
+    fontWeight: "600",
     textAlign: "center",
   },
   button: {

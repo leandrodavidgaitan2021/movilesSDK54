@@ -267,7 +267,7 @@ export default function RecorridoScreen() {
         <View style={styles.botonesAccionHeader}>
           <TouchableOpacity
             style={[styles.btnEscanear, { backgroundColor: colors.primary }]}
-            onPress={() => router.push("/escanear")}
+            onPress={() => router.push({ pathname: "/escanear", params: { modo: "visita" } })}
           >
             <Ionicons name="qr-code-outline" size={16} color="#fff" />
             <Text style={styles.btnEscanearText}>QR</Text>
