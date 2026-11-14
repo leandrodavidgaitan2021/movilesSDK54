@@ -20,7 +20,7 @@ import { useLocation } from "../../hooks/useLocation";
 import { useTheme } from "../../hooks/useTheme";
 import { obtenerCategorias, obtenerLugares } from "../../servicios/lugares";
 import { obtenerVisitas, registrarVisita } from "../../servicios/visitas";
-import { Categoria, Lugar } from "../../tipos";
+import { Categoria, Lugar, Visita } from "../../tipos";
 
 const RADIO_PROXIMIDAD_METROS = 150;
 
@@ -29,7 +29,7 @@ function calcularDistancia(
   lon1: number,
   lat2: number,
   lon2: number
-) {
+): number {
   const R = 6371e3;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
@@ -80,21 +80,27 @@ export default function PantallaInicio() {
   useEffect(() => {
     async function inicializar() {
       try {
-        const [respuestaLugares, respuestaCategorias, visitasGuardadas] = (await Promise.all([
+        const [respuestaLugares, respuestaCategorias, visitasGuardadas] = await Promise.all([
           obtenerLugares(),
           obtenerCategorias(),
           obtenerVisitas(db),
-        ])) as [any, any, any[]];
+        ]);
 
-        setLugares(respuestaLugares.datos || respuestaLugares);
-        setCategorias(
-          Array.isArray(respuestaCategorias)
-            ? respuestaCategorias
-            : respuestaCategorias.datos || []
-        );
+
+// Tipado estricto para las respuestas de la API
+        const listaLugares: Lugar[] = Array.isArray(respuestaLugares)
+          ? respuestaLugares
+          : (respuestaLugares as { datos?: Lugar[] }).datos ?? [];
+
+        const listaCategorias: Categoria[] = Array.isArray(respuestaCategorias)
+          ? respuestaCategorias
+          : (respuestaCategorias as { datos?: Categoria[] }).datos ?? [];
+
+        setLugares(listaLugares);
+        setCategorias(listaCategorias);
 
         const ids = new Set<string>(
-          visitasGuardadas.map((v) => v.lugarId.trim().toLowerCase())
+          (visitasGuardadas as Visita[]).map((v) => v.lugarId.trim().toLowerCase())
         );
         setLugaresVisitadosIds(ids);
       } catch (error) {
