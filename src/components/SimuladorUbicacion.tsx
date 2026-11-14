@@ -53,19 +53,46 @@ export default function SimuladorUbicacion({
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.sugerenciaLabel}>Accesos directos en Colón:</Text>
-      <View style={styles.chipsRow}>
+      <Text style={styles.sugerenciaLabel}>Accesos directos en Colón (5 lugares):</Text>
+      <View style={styles.chipsContainer}>
+        {/* 1. Oficina de Turismo */}
         <TouchableOpacity
           style={styles.chip}
           onPress={() => onCambiarCoordenadas(-32.21568, -58.13649)}
         >
-          <Text style={styles.chipText}>Oficina de Turismo</Text>
+          <Text style={styles.chipText}>Oficina Turismo</Text>
         </TouchableOpacity>
+
+        {/* 2. Centro / Plaza San Martín */}
         <TouchableOpacity
           style={styles.chip}
           onPress={() => onCambiarCoordenadas(-32.2214, -58.1381)}
         >
           <Text style={styles.chipText}>Centro / Plaza</Text>
+        </TouchableOpacity>
+
+        {/* 3. Complejo Termal Colón */}
+        <TouchableOpacity
+          style={styles.chip}
+          onPress={() => onCambiarCoordenadas(-32.2305, -58.1452)}
+        >
+          <Text style={styles.chipText}>Termas Colón</Text>
+        </TouchableOpacity>
+
+        {/* 4. Playa Norte / Costanera */}
+        <TouchableOpacity
+          style={styles.chip}
+          onPress={() => onCambiarCoordenadas(-32.2091, -58.1310)}
+        >
+          <Text style={styles.chipText}>Playa Norte</Text>
+        </TouchableOpacity>
+
+        {/* 5. Parque Nacional El Palmar (Cercanías/Acceso) */}
+        <TouchableOpacity
+          style={styles.chip}
+          onPress={() => onCambiarCoordenadas(-31.8590, -58.2380)}
+        >
+          <Text style={styles.chipText}>El Palmar</Text>
         </TouchableOpacity>
       </View>
 
@@ -111,12 +138,17 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   botonAplicarText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
-  sugerenciaLabel: { fontSize: 11, color: "#888", marginBottom: 4 },
-  chipsRow: { flexDirection: "row", gap: 6 },
+  sugerenciaLabel: { fontSize: 11, color: "#888", marginBottom: 6 },
+  chipsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 4,
+  },
   chip: {
     backgroundColor: "#f0f0f0",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#e0e0e0",
@@ -129,7 +161,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e8f8f0",
     paddingVertical: 8,
     borderRadius: 6,
-    marginTop: 10,
+    marginTop: 8,
     borderWidth: 1,
     borderColor: "#c6e7d6",
     gap: 6,
