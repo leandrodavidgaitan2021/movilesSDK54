@@ -1,6 +1,5 @@
 // src/app/(tabs)/index.tsx
 import { Ionicons } from "@expo/vector-icons";
-import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
 import { useEffect, useMemo, useState } from "react";
@@ -17,10 +16,11 @@ import ListaLugares from "../../components/ListaLugares";
 import MapaLugares from "../../components/MapaLugares";
 import SimuladorUbicacion from "../../components/SimuladorUbicacion";
 import { useAuth } from "../../hooks/useAuth";
+import { useLocation } from "../../hooks/useLocation";
 import { useTheme } from "../../hooks/useTheme";
 import { obtenerCategorias, obtenerLugares } from "../../servicios/lugares";
 import { obtenerVisitas, registrarVisita } from "../../servicios/visitas";
-import { Categoria, Lugar } from "../../tipos";
+import { Categoria, Lugar, Visita } from "../../tipos";
 
 const RADIO_PROXIMIDAD_METROS = 150;
 
@@ -29,7 +29,7 @@ function calcularDistancia(
   lon1: number,
   lat2: number,
   lon2: number
-) {
+): number {
   const R = 6371e3;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
@@ -51,108 +51,71 @@ export default function PantallaInicio() {
 
   const usuarioIdActual = (user ?? "").trim().toLowerCase();
 
+  // Consumimos la ubicación global desde el LocationContext
+  const {
+    ubicacionActual,
+    cambiarCoordenadasManual,
+    activarGpsReal,
+    inputLat,
+    inputLon,
+    setInputLat,
+    setInputLon,
+  } = useLocation();
+
   const [lugares, setLugares] = useState<Lugar[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
 
-  // Ubicación actual (por defecto Colón, Entre Ríos)
-  const [ubicacionActual, setUbicacionActual] = useState<{
-    latitud: number;
-    longitud: number;
-  }>({
-    latitud: -32.21568,
-    longitud: -58.13649,
-  });
-
   // Estados para el Simulador de Ubicación
   const [mostrarSimulador, setMostrarSimulador] = useState<boolean>(false);
-  const [inputLat, setInputLat] = useState<string>("-32.21568");
-  const [inputLon, setInputLon] = useState<string>("-58.13649");
 
   const [busquedaTexto, setBusquedaTexto] = useState<string>("");
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>("Todos");
   const [mostrarFiltrosExtra, setMostrarFiltrosExtra] = useState<boolean>(false);
 
-  // Control para aviso de proximidad (máximo 1 aviso por lugar y por día)
+  // Control para aviso de proximidad
   const [lugaresVisitadosIds, setLugaresVisitadosIds] = useState<Set<string>>(new Set());
   const [avisosDescartadosHoy, setAvisosDescartadosHoy] = useState<Set<string>>(new Set());
   const [registrandoGps, setRegistrandoGps] = useState<boolean>(false);
 
-  // 1. Obtener ubicación real por GPS al iniciar
-  useEffect(() => {
-    async function obtenerUbicacionGPS() {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          console.warn("Permiso de ubicación denegado. Usando ubicación por defecto.");
-          return;
-        }
-
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-
-        const lat = location.coords.latitude;
-        const lon = location.coords.longitude;
-
-        setUbicacionActual({ latitud: lat, longitud: lon });
-        setInputLat(lat.toString());
-        setInputLon(lon.toString());
-      } catch (error) {
-        console.error("Error al obtener la ubicación del GPS:", error);
-      }
-    }
-
-    obtenerUbicacionGPS();
-  }, []);
-
-  // 2. Inicializar lugares y categorías del backend
+  // Inicializar datos del backend y visitas previas en paralelo
   useEffect(() => {
     async function inicializarCatalogo() {
       try {
-        const [respuestaLugares, respuestaCategorias] = (await Promise.all([
-          obtenerLugares(db),
+        const [respuestaLugares, respuestaCategorias, visitasGuardadas] = await Promise.all([
+          obtenerLugares(),
           obtenerCategorias(),
-        ])) as [any, any];
+          usuarioIdActual ? obtenerVisitas(db, usuarioIdActual) : Promise.resolve([]),
+        ]);
 
-        setLugares(respuestaLugares.datos || respuestaLugares);
-        setCategorias(
-          Array.isArray(respuestaCategorias)
-            ? respuestaCategorias
-            : respuestaCategorias.datos || []
+        // Tipado estricto para las respuestas de la API
+        const listaLugares: Lugar[] = Array.isArray(respuestaLugares)
+          ? respuestaLugares
+          : (respuestaLugares as { datos?: Lugar[] }).datos ?? [];
+
+        const listaCategorias: Categoria[] = Array.isArray(respuestaCategorias)
+          ? respuestaCategorias
+          : (respuestaCategorias as { datos?: Categoria[] }).datos ?? [];
+
+        setLugares(listaLugares);
+        setCategorias(listaCategorias);
+
+        const ids = new Set<string>(
+          (visitasGuardadas as Visita[]).map((v) => v.lugarId.trim().toLowerCase())
         );
+        setLugaresVisitadosIds(ids);
       } catch (error) {
-        console.error("Error al inicializar catálogo:", error);
+        console.error("Error al inicializar catálogo y visitas:", error);
       } finally {
         setCargando(false);
       }
     }
     inicializarCatalogo();
-  }, [db]);
-
-  // 3. Cargar visitas previas aisladas por usuarioIdActual
-  useEffect(() => {
-    async function cargarVisitasUsuario() {
-      if (!usuarioIdActual) {
-        setLugaresVisitadosIds(new Set());
-        return;
-      }
-      try {
-        const visitasGuardadas = await obtenerVisitas(db, usuarioIdActual);
-        const ids = new Set<string>(
-          visitasGuardadas.map((v) => v.lugarId.trim().toLowerCase())
-        );
-        setLugaresVisitadosIds(ids);
-      } catch (error) {
-        console.error("Error al cargar visitas del usuario en Inicio:", error);
-      }
-    }
-    cargarVisitasUsuario();
   }, [db, usuarioIdActual]);
 
-  // Detectar el lugar más cercano dentro del radio de 150 metros que aún no fue visitado ni descartado hoy
+  // Detectar el lugar más cercano dentro del radio de 150 metros
   const lugarCercanoDetectado = useMemo(() => {
-    if (lugares.length === 0) return null;
+    if (!ubicacionActual || lugares.length === 0) return null;
 
     let masCercano: { lugar: Lugar; distancia: number } | null = null;
 
@@ -178,6 +141,51 @@ export default function PantallaInicio() {
 
     return masCercano;
   }, [lugares, ubicacionActual, lugaresVisitadosIds, avisosDescartadosHoy]);
+
+  const lugaresFiltrados = useMemo(() => {
+    const filtrados = lugares.filter((lugar) => {
+      const coincideNombre = lugar.nombre
+        .toLowerCase()
+        .includes(busquedaTexto.toLowerCase());
+
+      if (categoriaSeleccionada === "Todos") {
+        return coincideNombre;
+      }
+
+      const coincideCategoria = lugar.categoriaId === categoriaSeleccionada;
+      return coincideNombre && coincideCategoria;
+    });
+
+    if (!ubicacionActual) return filtrados;
+
+    return [...filtrados].sort((a, b) => {
+      const distanciaA = calcularDistancia(
+        ubicacionActual.latitud,
+        ubicacionActual.longitud,
+        a.coordenadas.latitud,
+        a.coordenadas.longitud
+      );
+      const distanciaB = calcularDistancia(
+        ubicacionActual.latitud,
+        ubicacionActual.longitud,
+        b.coordenadas.latitud,
+        b.coordenadas.longitud
+      );
+      return distanciaA - distanciaB;
+    });
+  }, [lugares, busquedaTexto, categoriaSeleccionada, ubicacionActual]);
+
+  // Si está cargando o la ubicación GPS aún no llega
+  if (cargando || !ubicacionActual) {
+    return (
+      <View style={[styles.centrado, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.textoCargando, { color: colors.textSecondary }]}>
+          Cargando Guía Turística y GPS...
+        </Text>
+      </View>
+    );
+  }
 
   // Registrar visita por proximidad física ("gps")
   const handleRegistrarPorProximidad = async () => {
@@ -241,13 +249,6 @@ export default function PantallaInicio() {
     setAvisosDescartadosHoy((prev) => new Set(prev).add(lugarId.trim().toLowerCase()));
   };
 
-  // Funciones del simulador
-  const cambiarCoordenadasManual = (lat: number, lon: number) => {
-    setUbicacionActual({ latitud: lat, longitud: lon });
-    setInputLat(lat.toString());
-    setInputLon(lon.toString());
-  };
-
   const aplicarCoordenadasInputs = () => {
     const latNum = parseFloat(inputLat);
     const lonNum = parseFloat(inputLon);
@@ -257,63 +258,8 @@ export default function PantallaInicio() {
       return;
     }
 
-    setUbicacionActual({ latitud: latNum, longitud: lonNum });
+    cambiarCoordenadasManual(latNum, lonNum);
   };
-
-  const activarGpsReal = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permiso denegado", "No se pudo acceder a los permisos de ubicación.");
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const lat = location.coords.latitude;
-      const lon = location.coords.longitude;
-
-      setUbicacionActual({ latitud: lat, longitud: lon });
-      setInputLat(lat.toString());
-      setInputLon(lon.toString());
-      Alert.alert("GPS Activado", "Ubicación real sincronizada correctamente.");
-    } catch {
-      Alert.alert("Error", "No se pudo obtener la posición actual del GPS.");
-    }
-  };
-
-  const lugaresFiltrados = useMemo(() => {
-    const filtrados = lugares.filter((lugar) => {
-      const coincideNombre = lugar.nombre
-        .toLowerCase()
-        .includes(busquedaTexto.toLowerCase());
-
-      if (categoriaSeleccionada === "Todos") {
-        return coincideNombre;
-      }
-
-      const coincideCategoria = lugar.categoriaId === categoriaSeleccionada;
-      return coincideNombre && coincideCategoria;
-    });
-
-    return [...filtrados].sort((a, b) => {
-      const distanciaA = calcularDistancia(
-        ubicacionActual.latitud,
-        ubicacionActual.longitud,
-        a.coordenadas.latitud,
-        a.coordenadas.longitud
-      );
-      const distanciaB = calcularDistancia(
-        ubicacionActual.latitud,
-        ubicacionActual.longitud,
-        b.coordenadas.latitud,
-        b.coordenadas.longitud
-      );
-      return distanciaA - distanciaB;
-    });
-  }, [lugares, busquedaTexto, categoriaSeleccionada, ubicacionActual]);
 
   const limpiarFiltros = () => {
     setBusquedaTexto("");
@@ -325,17 +271,6 @@ export default function PantallaInicio() {
     setCategoriaSeleccionada(cat);
     setMostrarFiltrosExtra(false);
   };
-
-  if (cargando) {
-    return (
-      <View style={[styles.centrado, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.textoCargando, { color: colors.textSecondary }]}>
-          Cargando Guía Turística y GPS...
-        </Text>
-      </View>
-    );
-  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -364,7 +299,7 @@ export default function PantallaInicio() {
         onGpsReal={activarGpsReal}
       />
 
-      {/* Banner de Proximidad Física ("estando físicamente cerca") */}
+      {/* Banner de Proximidad Física */}
       {lugarCercanoDetectado && (
         <View
           style={[

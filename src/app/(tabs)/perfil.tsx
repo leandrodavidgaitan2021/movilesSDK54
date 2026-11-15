@@ -13,12 +13,79 @@ import AccesoRestringido from "../../components/AccesoRestringido";
 import { useAuth } from "../../hooks/useAuth";
 import { useTheme } from "../../hooks/useTheme";
 import { useLoginBiometrico } from "../../hooks/useLoginBiometrico";
+import { useEffect, useState } from "react";
+import { Alert } from "react-native";
+import { obtenerCategorias } from "../../servicios/lugares";
+import {
+  actualizarCategoriasFavoritas,
+  extraerCategoriasFavoritas,
+  obtenerMiPerfil,
+  PerfilUsuario,
+} from "../../servicios/usuario";
+import { Categoria } from "../../tipos";
 
 export default function PerfilScreen() {
   const router = useRouter();
   const { colors, theme } = useTheme();
   const { user, cargando, token, logout } = useAuth();
   const { sensor, activa, activar, desactivar } = useLoginBiometrico();
+  const [perfil, setPerfil] = useState<PerfilUsuario | null>(null);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [favoritasIds, setFavoritasIds] = useState<string[]>([]);
+  const [cargandoPerfil, setCargandoPerfil] = useState<boolean>(false);
+  const [guardandoPrefs, setGuardandoPrefs] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!user) {
+      setPerfil(null);
+      setFavoritasIds([]);
+      return;
+    }
+
+    async function cargarDatosCuenta() {
+      setCargandoPerfil(true);
+      try {
+        const [datosPerfil, listaCategorias] = await Promise.all([
+          obtenerMiPerfil(),
+          obtenerCategorias(),
+        ]);
+        setPerfil(datosPerfil);
+        setCategorias(listaCategorias);
+        setFavoritasIds(extraerCategoriasFavoritas(datosPerfil));
+      } catch (error) {
+        console.warn("No se pudieron cargar los datos completos del perfil:", error);
+      } finally {
+        setCargandoPerfil(false);
+      }
+    }
+
+    cargarDatosCuenta();
+  }, [user]);
+
+  async function alternarCategoria(categoriaId: string) {
+    if (guardandoPrefs) return;
+
+    const anteriores = favoritasIds;
+    const nuevas = anteriores.includes(categoriaId)
+      ? anteriores.filter((id) => id !== categoriaId)
+      : [...anteriores, categoriaId];
+
+    setFavoritasIds(nuevas);
+    setGuardandoPrefs(true);
+
+    try {
+      const perfilActualizado = await actualizarCategoriasFavoritas(perfil, nuevas);
+      setPerfil(perfilActualizado);
+    } catch (error) {
+      setFavoritasIds(anteriores);
+      Alert.alert(
+        "No se pudo actualizar",
+        "Verificá tu conexión a internet para guardar tus categorías favoritas.",
+      );
+    } finally {
+      setGuardandoPrefs(false);
+    }
+  }
 
   if (cargando) {
     return (
@@ -39,10 +106,72 @@ export default function PerfilScreen() {
       style={[styles.containerLogeado, { backgroundColor: colors.background }]}
     >
       <Ionicons name="person-circle-outline" size={80} color={colors.primary} />
-      <Text style={[styles.title, { color: colors.text }]}>Mi Perfil</Text>
+      <Text style={[styles.title, { color: colors.text }]}>{perfil?.nombre || "Mi Perfil"}</Text>
       <Text style={[styles.emailText, { color: colors.textSecondary }]}>
         {user}
       </Text>
+
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            borderWidth: theme === "dark" ? 1 : 0,
+          },
+        ]}
+      >
+      <View style={styles.filaHeaderCard}>
+        <Text style={[styles.cardTitle, { color: colors.text }]}>
+          Categorías favoritas
+        </Text>
+        {(cargandoPerfil || guardandoPrefs) && (
+          <ActivityIndicator size="small" color={colors.primary} />
+        )}
+      </View>
+      <Text style={[styles.cardDesc, { color: colors.textSecondary, marginBottom: 10 }]}>
+        Elegí qué tipo de lugares te interesan más en Colón.
+      </Text>
+
+      {categorias.length > 0 ? (
+        <View style={styles.chipsContainer}>
+            {categorias.map((cat) => {
+              const seleccionada = favoritasIds.includes(cat.id);
+              return (
+                <TouchableOpacity
+                  key={cat.id}
+                  onPress={() => alternarCategoria(cat.id)}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: seleccionada ? colors.primary : colors.background,
+                      borderColor: seleccionada ? colors.primary : colors.border,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={seleccionada ? "checkmark-circle" : "add-circle-outline"}
+                    size={16}
+                    color={seleccionada ? "#fff" : colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.chipText,
+                      { color: seleccionada ? "#fff" : colors.text },
+                    ]}
+                  >
+                    {cat.nombre}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={[styles.cardDesc, { color: colors.textSecondary }]}>
+          Conectate a internet para ver y editar tus categorías.
+          </Text>
+        )}
+      </View>
 
       <View
         style={[
@@ -177,5 +306,29 @@ const styles = StyleSheet.create({
     color: "#fff", 
     fontWeight: "bold", 
     fontSize: 14 
+  },
+  filaHeaderCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+  chipsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

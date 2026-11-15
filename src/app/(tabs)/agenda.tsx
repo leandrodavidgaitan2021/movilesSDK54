@@ -1,31 +1,42 @@
+// src/app/(tabs)/agenda.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { FlatList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native";
+import { FlatList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Alert } from "react-native";
 import { useTheme } from "../../hooks/useTheme";
+import { useAuth } from "../../hooks/useAuth";
 import { useState, useEffect } from "react";
 import { router } from "expo-router";
-import { obtenerEventos } from "../../servicios/eventos";
+import { obtenerEventos, obtenerEventosGuardados, guardarEvento, eliminarEventoGuardado } from "../../servicios/eventos";
 import { obtenerLugares } from "../../servicios/lugares";
 
 export default function AgendaScreen() {
   const { colors, theme } = useTheme();
+  const { isAuthenticated } = useAuth();
+
   const [todosLosEventos, setTodosLosEventos] = useState<any[]>([]);
   const [eventosFiltrados, setEventosFiltrados] = useState<any[]>([]);
+  const [eventosGuardadosIds, setEventosGuardadosIds] = useState<Set<string>>(new Set());
   
   // Diccionario para almacenar los lugares y buscar su nombre por ID
   const [lugaresMap, setLugaresMap] = useState<{ [key: string]: string }>({});
   
   const [cargando, setCargando] = useState<boolean>(true);
-  const [filtroActivo, setFiltroActivo] = useState<"todos" | "hoy">("todos");
+  const [filtroActivo, setFiltroActivo] = useState<"todos" | "hoy" | "guardados">("todos");
 
   useEffect(() => {
     async function cargarDatosAgenda() {
       try {
         const hoy = new Date().toISOString().split("T")[0];
 
-        // Ejecutamos en paralelo la llamada a eventos y a lugares para mayor velocidad
-        const [respuestaEventos, respuestaLugares] = await Promise.all([
+        // Si el usuario está logueado consultamos los guardados al endpoint /yo/eventos-guardados
+        const promesaGuardados = isAuthenticated 
+          ? obtenerEventosGuardados().catch(() => []) 
+          : Promise.resolve([]);
+
+        // Ejecutamos en paralelo la llamada a eventos, lugares y eventos guardados
+        const [respuestaEventos, respuestaLugares, idsGuardados] = await Promise.all([
           obtenerEventos(hoy),
-          obtenerLugares().catch(() => ({ datos: [] }))
+          obtenerLugares().catch(() => ({ datos: [] })),
+          promesaGuardados
         ]);
 
         // Parseamos los eventos
@@ -41,6 +52,9 @@ export default function AgendaScreen() {
         });
         setLugaresMap(mapa);
 
+        // Guardamos los IDs de los eventos guardados por el usuario
+        setEventosGuardadosIds(new Set(idsGuardados));
+
       } catch (error) {
         console.error("Error al cargar datos de la agenda:", error);
       } finally {
@@ -49,10 +63,67 @@ export default function AgendaScreen() {
     }
 
     cargarDatosAgenda();
-  }, []);
+  }, [isAuthenticated]);
 
-  // Función para cambiar el filtro (Todos / Solo de hoy)
-  const cambiarFiltro = (tipo: "todos" | "hoy") => {
+  // Manejar el guardado o eliminación de un evento en la agenda (/yo/eventos-guardados)
+  const handleToggleGuardar = async (eventoId: string) => {
+    if (!isAuthenticated) {
+      Alert.alert(
+        "Acceso Requerido",
+        "Debes iniciar sesión para guardar eventos en tu agenda personal.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Iniciar Sesión", onPress: () => router.push("/login") }
+        ]
+      );
+      return;
+    }
+
+    try {
+      const estaGuardado = eventosGuardadosIds.has(eventoId);
+
+      if (estaGuardado) {
+        await eliminarEventoGuardado(eventoId);
+        setEventosGuardadosIds((prev) => {
+          const nuevoSet = new Set(prev);
+          nuevoSet.delete(eventoId);
+          return nuevoSet;
+        });
+        Alert.alert("Agenda", "Evento removido de tus eventos guardados.");
+      } else {
+        await guardarEvento(eventoId);
+        setEventosGuardadosIds((prev) => {
+          const nuevoSet = new Set(prev);
+          nuevoSet.add(eventoId);
+          return nuevoSet;
+        });
+        Alert.alert("¡Éxito!", "Evento guardado en tu agenda correctamente.");
+      }
+
+      // Si el usuario está viendo el filtro de guardados, actualizamos la lista filtrada al instante
+      if (filtroActivo === "guardados") {
+        const actualizados = todosLosEventos.filter((item) => eventosGuardadosIds.has(item.id));
+        setEventosFiltrados(actualizados);
+      }
+    } catch (error) {
+      Alert.alert("Error", "No se pudo actualizar el estado del evento.");
+    }
+  };
+
+  // Función para cambiar el filtro (Todos / Hoy / Guardados)
+  const cambiarFiltro = (tipo: "todos" | "hoy" | "guardados") => {
+    if (tipo === "guardados" && !isAuthenticated) {
+      Alert.alert(
+        "Acceso Requerido",
+        "Inicia sesión para ver tus eventos guardados.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Iniciar Sesión", onPress: () => router.push("/login") }
+        ]
+      );
+      return;
+    }
+
     setFiltroActivo(tipo);
 
     if (tipo === "hoy") {
@@ -61,6 +132,9 @@ export default function AgendaScreen() {
         if (!item.inicio) return false;
         return item.inicio.startsWith(hoyString);
       });
+      setEventosFiltrados(filtrados);
+    } else if (tipo === "guardados") {
+      const filtrados = todosLosEventos.filter((item) => eventosGuardadosIds.has(item.id));
       setEventosFiltrados(filtrados);
     } else {
       setEventosFiltrados(todosLosEventos);
@@ -109,7 +183,7 @@ export default function AgendaScreen() {
         </Text>
       </View>
 
-      {/* Botones de Filtro (Todos / Hoy) */}
+      {/* Botones de Filtro (Todos / Hoy / Guardados) */}
       <View style={styles.filtroContainer}>
         <TouchableOpacity
           style={[
@@ -125,7 +199,7 @@ export default function AgendaScreen() {
               { color: filtroActivo === "todos" ? "#fff" : colors.primary },
             ]}
           >
-            Próximos Eventos
+            Próximos
           </Text>
         </TouchableOpacity>
 
@@ -143,7 +217,25 @@ export default function AgendaScreen() {
               { color: filtroActivo === "hoy" ? "#fff" : colors.primary },
             ]}
           >
-            Solo de Hoy
+            Hoy
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.botonFiltro,
+            { borderColor: colors.primary },
+            filtroActivo === "guardados" && { backgroundColor: colors.primary },
+          ]}
+          onPress={() => cambiarFiltro("guardados")}
+        >
+          <Text
+            style={[
+              styles.textoBotonFiltro,
+              { color: filtroActivo === "guardados" ? "#fff" : colors.primary },
+            ]}
+          >
+            Mis Guardados
           </Text>
         </TouchableOpacity>
       </View>
@@ -159,6 +251,8 @@ export default function AgendaScreen() {
             <Text style={{ color: colors.textSecondary, textAlign: "center" }}>
               {filtroActivo === "hoy" 
                 ? "No hay eventos programados para el día de hoy." 
+                : filtroActivo === "guardados"
+                ? "No tenés eventos guardados en tu agenda."
                 : "No hay eventos próximos disponibles."}
             </Text>
           </View>
@@ -166,9 +260,9 @@ export default function AgendaScreen() {
         renderItem={({ item }) => {
           const { fecha, hora } = formatearFechaHora(item.inicio);
           
-          // Buscamos el nombre real del lugar usando el mapa
           const nombreLugar = item.lugarId ? lugaresMap[item.lugarId] : null;
           const textoUbicacion = item.direccionLibre || nombreLugar || (item.lugarId ? `Lugar ID: ${item.lugarId}` : "Ubicación a confirmar");
+          const estaGuardado = eventosGuardadosIds.has(item.id);
 
           return (
             <TouchableOpacity
@@ -196,11 +290,13 @@ export default function AgendaScreen() {
                       {fecha} ⏰ {hora} hs
                     </Text>
                   </View>
-                  <TouchableOpacity activeOpacity={0.7}>
+
+                  {/* Botón Guardar / Quitar Evento */}
+                  <TouchableOpacity activeOpacity={0.7} onPress={() => handleToggleGuardar(item.id)}>
                     <Ionicons
-                      name="bookmark-outline"
+                      name={estaGuardado ? "bookmark" : "bookmark-outline"}
                       size={20}
-                      color={colors.textSecondary}
+                      color={estaGuardado ? colors.primary : colors.textSecondary}
                     />
                   </TouchableOpacity>
                 </View>
@@ -277,7 +373,7 @@ const styles = StyleSheet.create({
   },
   filtroContainer: {
     flexDirection: "row",
-    gap: 10,
+    gap: 8,
     marginBottom: 16,
   },
   botonFiltro: {
@@ -289,7 +385,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   textoBotonFiltro: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "bold",
   },
   eventCard: {

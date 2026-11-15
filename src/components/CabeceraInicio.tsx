@@ -35,7 +35,7 @@ export default function CabeceraInicio({ colors, theme }: Props) {
           styles.qrButton,
           { backgroundColor: theme === "dark" ? "#2c2c2c" : "#f0f0f0" },
         ]}
-        onPress={() => router.push("/escanear")}
+        onPress={() => router.push({ pathname: "/escanear", params: { modo: "ver" } })}
       >
         <Ionicons name="qr-code-outline" size={24} color={colors.text} />
       </TouchableOpacity>

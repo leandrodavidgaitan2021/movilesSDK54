@@ -2,6 +2,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
   KeyboardAvoidingView,
@@ -13,59 +15,77 @@ import {
   View,
 } from "react-native";
 import * as z from "zod";
-import { useAuth } from "../hooks/useAuth"; // <-- Importamos el hook del contexto
+import { useAuth } from "../hooks/useAuth";
+import { useTheme } from "../hooks/useTheme";
 
-// 1. Esquema de validación con Zod para el registro
-const registerSchema = z.object({
-  nombre: z.string().min(1, "El nombre completo es requerido"),
-  email: z
-    .string()
-    .min(1, "El correo es requerido")
-    .email("Correo electrónico inválido"),
-  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
-});
+const registerSchema = z
+  .object({
+    nombre: z.string().min(1, "El nombre completo es requerido"),
+    email: z
+      .string()
+      .min(1, "El correo es requerido")
+      .email("Correo electrónico inválido")
+      .transform((val) => val.trim().toLowerCase()),
+    password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
+    confirmPassword: z.string().min(1, "Debes confirmar tu contraseña"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Las contraseñas no coinciden",
+    path: ["confirmPassword"],
+  });
 
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { login } = useAuth(); // <-- Extraemos la función login del contexto global
+  const { login } = useAuth();
+  const { colors } = useTheme();
 
-  // 2. Configuración de react-hook-form
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const {
     control,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       nombre: "",
       email: "",
       password: "",
+      confirmPassword: "",
     },
   });
 
-  // 3. Función al enviar el formulario con éxito
-  const handleRegister = (data: RegisterFormData) => {
-    // Guardamos la sesión directamente en el Contexto Global (sin AsyncStorage)
-    const tokenDelServidor = "jwt_token_generado_por_el_backend_123";
-    login(data.email, tokenDelServidor);
-    alert(`¡Registro exitoso! Bienvenido, ${data.nombre}`);
-    router.replace("/(tabs)/perfil");
+  const handleRegister = async (data: RegisterFormData) => {
+    try {
+      const tokenDelServidor = "jwt_token_generado_por_el_backend_123";
+
+      await SecureStore.setItemAsync("user_token", tokenDelServidor);
+      await SecureStore.setItemAsync("user_email", data.email);
+
+      login(data.email, tokenDelServidor);
+      alert(`¡Registro exitoso! Bienvenido, ${data.nombre}`);
+      router.replace("/(tabs)/perfil");
+    } catch (error) {
+      console.error("Error al guardar la sesión de registro:", error);
+      alert("Ocurrió un error al guardar las credenciales de forma segura.");
+    }
   };
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
     >
       <View style={styles.formContainer}>
         <View style={styles.iconContainer}>
-          <Ionicons name="person-add" size={64} color="#27ae60" />
+          <Ionicons name="person-add" size={64} color={colors.primary} />
         </View>
 
-        <Text style={styles.title}>Crear Cuenta</Text>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.title, { color: colors.text }]}>Crear Cuenta</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           Regístrate para guardar tu bitácora de viaje en Colón
         </Text>
 
@@ -75,9 +95,16 @@ export default function RegisterScreen() {
           name="nombre"
           render={({ field: { onChange, onBlur, value } }) => (
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.card,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
               placeholder="Nombre completo"
-              placeholderTextColor="#aaa"
+              placeholderTextColor={colors.textSecondary}
               onBlur={onBlur}
               value={value}
               onChangeText={onChange}
@@ -88,15 +115,22 @@ export default function RegisterScreen() {
           <Text style={styles.errorText}>{errors.nombre.message}</Text>
         )}
 
-        {/* Input de Correo */}
+        {/* Input de Correo con sanitización */}
         <Controller
           control={control}
           name="email"
           render={({ field: { onChange, onBlur, value } }) => (
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.card,
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
               placeholder="Correo electrónico"
-              placeholderTextColor="#aaa"
+              placeholderTextColor={colors.textSecondary}
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
@@ -110,38 +144,115 @@ export default function RegisterScreen() {
           <Text style={styles.errorText}>{errors.email.message}</Text>
         )}
 
-        {/* Input de Contraseña */}
-        <Controller
-          control={control}
-          name="password"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              style={styles.input}
-              placeholder="Contraseña (mínimo 8 caracteres)"
-              placeholderTextColor="#aaa"
-              secureTextEntry
-              onBlur={onBlur}
-              value={value}
-              onChangeText={onChange}
+        {/* Input de Contraseña con el Ojito */}
+        <View
+          style={[
+            styles.passwordContainer,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <Controller
+            control={control}
+            name="password"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[
+                  styles.passwordInput,
+                  {
+                    color: colors.text,
+                  },
+                ]}
+                placeholder="Contraseña (mínimo 8 caracteres)"
+                placeholderTextColor={colors.textSecondary}
+                secureTextEntry={!showPassword}
+                onBlur={onBlur}
+                value={value}
+                onChangeText={onChange}
+              />
+            )}
+          />
+          <TouchableOpacity
+            style={styles.eyeIcon}
+            onPress={() => setShowPassword(!showPassword)}
+          >
+            <Ionicons
+              name={showPassword ? "eye-off" : "eye"}
+              size={22}
+              color={colors.textSecondary}
             />
-          )}
-        />
+          </TouchableOpacity>
+        </View>
         {errors.password && (
           <Text style={styles.errorText}>{errors.password.message}</Text>
         )}
 
-        <TouchableOpacity
-          style={styles.button}
-          onPress={handleSubmit(handleRegister)}
+        {/* Input de Confirmar Contraseña con su propio Ojito */}
+        <View
+          style={[
+            styles.passwordContainer,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
+          ]}
         >
-          <Text style={styles.buttonText}>Registrarse</Text>
+          <Controller
+            control={control}
+            name="confirmPassword"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[
+                  styles.passwordInput,
+                  {
+                    color: colors.text,
+                  },
+                ]}
+                placeholder="Repetir contraseña"
+                placeholderTextColor={colors.textSecondary}
+                secureTextEntry={!showConfirmPassword}
+                onBlur={onBlur}
+                value={value}
+                onChangeText={onChange}
+              />
+            )}
+          />
+          <TouchableOpacity
+            style={styles.eyeIcon}
+            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+          >
+            <Ionicons
+              name={showConfirmPassword ? "eye-off" : "eye"}
+              size={22}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
+        {errors.confirmPassword && (
+          <Text style={styles.errorText}>{errors.confirmPassword.message}</Text>
+        )}
+
+        <TouchableOpacity
+          style={[
+            styles.button,
+            { backgroundColor: colors.primary },
+            isSubmitting && { opacity: 0.7 },
+          ]}
+          onPress={handleSubmit(handleRegister)}
+          disabled={isSubmitting}
+        >
+          <Text style={styles.buttonText}>
+            {isSubmitting ? "Registrando..." : "Registrarse"}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backButtonText}>
+          <Text style={[styles.backButtonText, { color: colors.primary }]}>
             ¿Ya tienes cuenta? Inicia sesión
           </Text>
         </TouchableOpacity>
@@ -153,7 +264,6 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
     justifyContent: "center",
   },
   formContainer: {
@@ -169,26 +279,37 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "#2c3e50",
     textAlign: "center",
     marginBottom: 5,
   },
   subtitle: {
     fontSize: 14,
-    color: "#7f8c8d",
     textAlign: "center",
     marginBottom: 30,
   },
   input: {
-    backgroundColor: "#fff",
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: 10,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: "#e0e0e0",
     marginBottom: 5,
-    color: "#333",
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 5,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+  },
+  eyeIcon: {
+    paddingHorizontal: 14,
   },
   errorText: {
     color: "#e74c3c",
@@ -197,7 +318,6 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   button: {
-    backgroundColor: "#27ae60",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
@@ -218,7 +338,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   backButtonText: {
-    color: "#27ae60",
     fontSize: 14,
     fontWeight: "600",
   },

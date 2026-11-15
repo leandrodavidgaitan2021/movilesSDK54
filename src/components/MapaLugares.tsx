@@ -1,8 +1,8 @@
-import { StyleSheet, View, Text, TouchableOpacity } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Lugar } from "../tipos";
 import { useLocation } from "../hooks/useLocation";
 
@@ -12,12 +12,23 @@ interface Props {
 
 export default function MapaLugares({ lugares }: Props) {
   const router = useRouter();
+  const mapRef = useRef<MapView>(null);
   
-  // extrae la ubicación actual desde el contexto
+  // Extraemos la ubicación actual del contexto
   const { ubicacionActual } = useLocation();
 
-  // Función que verificar si la ubicación actual coincide con algún lugar de la lista
+  // Función auxiliar segura
   const obtenerDatosUbicacionActual = () => {
+    if (!ubicacionActual) {
+      return {
+        id: "tu-ubicacion",
+        nombre: "Estás aquí",
+        subtitulo: null,
+        descripcionCorta: "Posición actual",
+        esUbicacionActual: true,
+      };
+    }
+
     const lugarEncontrado = lugares.find(
       (lugar) =>
         Math.abs(lugar.coordenadas.latitud - ubicacionActual.latitud) < 0.0001 &&
@@ -51,7 +62,29 @@ export default function MapaLugares({ lugares }: Props) {
     esUbicacionActual: boolean;
   } | null>(obtenerDatosUbicacionActual);
 
-  // Con esto verificamos si estamos en un lugar de la lista para no duplicar el marcador
+  // Cada vez que 'ubicacionActual' cambie (por ejemplo, al tocar un chip de Colón o GPS),
+  // movemos la cámara del mapa automáticamente a las nuevas coordenadas.
+  useEffect(() => {
+    if (ubicacionActual && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: ubicacionActual.latitud,
+        longitude: ubicacionActual.longitud,
+        latitudeDelta: 0.03,
+        longitudeDelta: 0.03,
+      }, 1000); // Duración de la animación en ms
+    }
+  }, [ubicacionActual]);
+
+  // Si la ubicación aún es null, mostramos el indicador de carga
+  if (!ubicacionActual) {
+    return (
+      <View style={[styles.mapContainer, styles.centrado]}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={{ marginTop: 10, color: "#666" }}>Obteniendo ubicación GPS...</Text>
+      </View>
+    );
+  }
+
   const lugarActualEnLista = lugares.find(
     (lugar) =>
       Math.abs(lugar.coordenadas.latitud - ubicacionActual.latitud) < 0.0001 &&
@@ -61,8 +94,9 @@ export default function MapaLugares({ lugares }: Props) {
   return (
     <View style={styles.mapContainer}>
       <MapView
+        ref={mapRef}
         style={styles.map}
-        region={{
+        initialRegion={{
           latitude: ubicacionActual.latitud,
           longitude: ubicacionActual.longitud,
           latitudeDelta: 0.03,
@@ -73,7 +107,7 @@ export default function MapaLugares({ lugares }: Props) {
           setLugarSeleccionado(obtenerDatosUbicacionActual());
         }}
       >
-        {/* Marcador de tu ubicación actual, solo si NO estás exactamente en un lugar de la lista */}
+        {/* Marcador de tu ubicación actual */}
         {!lugarActualEnLista && (
           <Marker
             coordinate={{
@@ -121,7 +155,7 @@ export default function MapaLugares({ lugares }: Props) {
         })}
       </MapView>
 
-      {/* Esto muestra un globo de diálogo flotante estilo historieta */}
+      {/* Globo flotante */}
       {lugarSeleccionado && (
         <View style={styles.contenedorGlobo}>
           <View
@@ -181,11 +215,15 @@ const styles = StyleSheet.create({
     flex: 1, 
     position: "relative" 
   },
+  centrado: {
+    justifyContent: "center",
+    alignItems: "center",
+    flex: 1,
+  },
   map: { 
     width: "100%", 
     height: "100%" 
   },
-
   contenedorGlobo: {
     position: "absolute",
     top: 15,
