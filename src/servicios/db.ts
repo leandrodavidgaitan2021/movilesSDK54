@@ -46,6 +46,12 @@ export async function inicializarBaseDeDatosLocal(database?: SQLite.SQLiteDataba
         nota TEXT,
         sincronizada INTEGER NOT NULL DEFAULT 0
       );
+
+      -- Tabla para almacenar los eventos guardados localmente (Agenda Offline-First)
+      CREATE TABLE IF NOT EXISTS agenda_local (
+        eventoId TEXT PRIMARY KEY NOT NULL,
+        creadoEn TEXT NOT NULL
+      );
     `);
 
     // Migraciones seguras por si las columnas ya existían
@@ -53,7 +59,7 @@ export async function inicializarBaseDeDatosLocal(database?: SQLite.SQLiteDataba
     try { await dbTarget.execAsync(`ALTER TABLE visitas ADD COLUMN nota TEXT;`); } catch {}
     try { await dbTarget.execAsync(`ALTER TABLE visitas ADD COLUMN sincronizada INTEGER NOT NULL DEFAULT 0;`); } catch {}
 
-    console.log("SQLite inicializado correctamente.");
+    console.log("SQLite inicializado correctamente con agenda local.");
   } catch (error) {
     console.error("Error al inicializar las tablas en SQLite:", error);
   }
