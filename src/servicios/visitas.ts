@@ -42,8 +42,62 @@ async function enviarVisitaAApi(
 }
 
 /**
- * Registra una nueva visita o actualiza la existente en SQLite sin duplicar el lugar,
- * e intenta sincronizarla con la API si hay conexión.
+ * Descarga las visitas del usuario desde GET /yo/visitas y las guarda en SQLite
+ * aisladas por usuarioId sin pisar fotos o notas locales.
+ */
+export async function hidratarVisitasDesdeApi(
+  db: SQLiteDatabase,
+  usuarioId: string
+): Promise<void> {
+  const userLimpio = usuarioId.trim();
+  if (!userLimpio) return;
+
+  try {
+    const res = await api.get('/yo/visitas');
+    const lista = Array.isArray(res.data) ? res.data : res.data?.items ?? [];
+
+    for (const item of lista) {
+      const lugarId = (item.lugarId ?? item.lugar?.id ?? '').toString().trim();
+      if (!lugarId) continue;
+
+      const existente = await db.getFirstAsync<{ id: string }>(
+        `SELECT id FROM visitas 
+         WHERE TRIM(usuarioId) = ? AND TRIM(LOWER(lugarId)) = TRIM(LOWER(?)) 
+         LIMIT 1`,
+        [userLimpio, lugarId]
+      );
+
+      if (!existente) {
+        const idVisita = item.id ? String(item.id) : `vis-api-${userLimpio}-${lugarId}-${Date.now()}`;
+        const fechaHora = item.fechaHora ?? item.creadoEn ?? new Date().toISOString();
+        const origen: OrigenVisita = item.origen ?? 'manual';
+        const nota = item.nota ?? null;
+        const fotoUri = item.fotoUrl ?? item.fotoUri ?? null;
+
+        await db.runAsync(
+          `INSERT OR IGNORE INTO visitas 
+           (id, usuarioId, lugarId, fechaHora, origen, fotoUri, nota, sincronizada)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+          [idVisita, userLimpio, lugarId, fechaHora, origen, fotoUri, nota]
+        );
+      } else {
+        await db.runAsync(
+          `UPDATE visitas SET sincronizada = 1 WHERE id = ? AND TRIM(usuarioId) = ?`,
+          [existente.id, userLimpio]
+        );
+      }
+    }
+  } catch (error: any) {
+    console.warn(
+      "No se pudo hidratar GET /yo/visitas (modo offline):",
+      error?.response?.status ?? error?.message
+    );
+  }
+}
+
+/**
+ * Registra una nueva visita o actualiza la existente en SQLite para ESTE usuario
+ * sin duplicar el lugar ni pisar visitas de otros usuarios.
  */
 export async function registrarVisita(
   db: SQLiteDatabase,
@@ -55,35 +109,37 @@ export async function registrarVisita(
 ): Promise<ResultadoRegistroVisita> {
   const ahora = new Date().toISOString();
   const lugarIdLimpio = lugarId.trim();
+  const userLimpio = usuarioId.trim();
 
-  // Intentamos enviar al backend (el interceptor de api.ts ya verifica red y adjunta el Bearer token)
   const sincronizadaConApi = await enviarVisitaAApi(lugarIdLimpio, origen, ahora);
 
-  // 1. Verificar si este lugar ya existe en el recorrido (sin importar mayúsculas, espacios o origen)
+  // 1. Verificar si ESTE usuario ya tiene este lugar en su recorrido
   const existente = await db.getFirstAsync<{
     id: string;
     fotoUri: string | null;
     nota: string | null;
   }>(
-    'SELECT id, fotoUri, nota FROM visitas WHERE TRIM(LOWER(lugarId)) = TRIM(LOWER(?)) ORDER BY fechaHora DESC LIMIT 1',
-    [lugarIdLimpio]
+    `SELECT id, fotoUri, nota 
+     FROM visitas 
+     WHERE TRIM(usuarioId) = ? AND TRIM(LOWER(lugarId)) = TRIM(LOWER(?)) 
+     ORDER BY fechaHora DESC LIMIT 1`,
+    [userLimpio, lugarIdLimpio]
   );
 
   if (existente) {
-    // Si ya existe, NO insertamos fila nueva. Conservamos foto y nota previas si vienen en null.
     const fotoFinal = fotoUri ?? existente.fotoUri;
     const notaFinal = nota ?? existente.nota;
 
     await db.runAsync(
       `UPDATE visitas 
-       SET usuarioId = ?, fechaHora = ?, origen = ?, fotoUri = ?, nota = ?, sincronizada = ? 
-       WHERE id = ?`,
-      [usuarioId, ahora, origen, fotoFinal, notaFinal, sincronizadaConApi ? 1 : 0, existente.id]
+       SET fechaHora = ?, origen = ?, fotoUri = ?, nota = ?, sincronizada = ? 
+       WHERE id = ? AND TRIM(usuarioId) = ?`,
+      [ahora, origen, fotoFinal, notaFinal, sincronizadaConApi ? 1 : 0, existente.id, userLimpio]
     );
 
     return {
       id: existente.id,
-      usuarioId,
+      usuarioId: userLimpio,
       lugarId: lugarIdLimpio,
       fechaHora: ahora,
       origen,
@@ -94,10 +150,10 @@ export async function registrarVisita(
     };
   }
 
-  // 2. Si el lugar no estaba en el recorrido, creamos un registro nuevo
+  // 2. Si el lugar no estaba en el recorrido de este usuario, creamos un registro nuevo
   const nuevaVisita: Visita = {
     id: `vis-${Date.now()}`,
-    usuarioId,
+    usuarioId: userLimpio,
     lugarId: lugarIdLimpio,
     fechaHora: ahora,
     origen,
@@ -128,9 +184,13 @@ export async function registrarVisita(
 }
 
 /**
- * Obtiene todas las visitas registradas en SQLite en orden descendente.
+ * Obtiene únicamente las visitas del usuario activo en orden descendente.
  */
-export async function obtenerVisitas(db: SQLiteDatabase): Promise<Visita[]> {
+export async function obtenerVisitas(
+  db: SQLiteDatabase,
+  usuarioId: string
+): Promise<Visita[]> {
+  const userLimpio = usuarioId.trim();
   const filas = await db.getAllAsync<{
     id: string;
     usuarioId: string;
@@ -140,7 +200,10 @@ export async function obtenerVisitas(db: SQLiteDatabase): Promise<Visita[]> {
     fotoUri: string | null;
     nota: string | null;
     sincronizada: number;
-  }>('SELECT * FROM visitas ORDER BY fechaHora DESC');
+  }>(
+    'SELECT * FROM visitas WHERE TRIM(usuarioId) = ? ORDER BY fechaHora DESC',
+    [userLimpio]
+  );
 
   return filas.map((f) => ({
     ...f,
@@ -149,10 +212,15 @@ export async function obtenerVisitas(db: SQLiteDatabase): Promise<Visita[]> {
 }
 
 /**
- * Obtiene las visitas realizando un LEFT JOIN con la tabla `lugares_cache` en SQLite,
- * asegurando que no se muestren lugares duplicados.
+ * Obtiene las visitas del usuario activo realizando un LEFT JOIN con `lugares_cache`,
+ * asegurando que no se muestren lugares duplicados ni de otros usuarios.
  */
-export async function obtenerVisitasConLugar(db: SQLiteDatabase): Promise<VisitaConLugar[]> {
+export async function obtenerVisitasConLugar(
+  db: SQLiteDatabase,
+  usuarioId: string
+): Promise<VisitaConLugar[]> {
+  const userLimpio = usuarioId.trim();
+
   try {
     await db.runAsync(`
       DELETE FROM visitas
@@ -160,7 +228,7 @@ export async function obtenerVisitasConLugar(db: SQLiteDatabase): Promise<Visita
         SELECT id FROM (
           SELECT id,
                  ROW_NUMBER() OVER (
-                   PARTITION BY TRIM(LOWER(lugarId))
+                   PARTITION BY TRIM(usuarioId), TRIM(LOWER(lugarId))
                    ORDER BY (CASE WHEN fotoUri IS NOT NULL THEN 1 ELSE 0 END) DESC,
                             (CASE WHEN nota IS NOT NULL THEN 1 ELSE 0 END) DESC,
                             fechaHora DESC
@@ -188,7 +256,9 @@ export async function obtenerVisitasConLugar(db: SQLiteDatabase): Promise<Visita
       `SELECT v.*, l.nombre AS lugarNombre 
        FROM visitas v 
        LEFT JOIN lugares_cache l ON TRIM(LOWER(v.lugarId)) = TRIM(LOWER(l.id)) 
-       ORDER BY v.fechaHora DESC`
+       WHERE TRIM(v.usuarioId) = ?
+       ORDER BY v.fechaHora DESC`,
+      [userLimpio]
     );
 
     const vistos = new Set<string>();
@@ -215,17 +285,22 @@ export async function obtenerVisitasConLugar(db: SQLiteDatabase): Promise<Visita
     return unicas;
   } catch (e) {
     console.warn("No se pudo realizar el LEFT JOIN con lugares_cache, usando fallback:", e);
-    const visitas = await obtenerVisitas(db);
+    const visitas = await obtenerVisitas(db, userLimpio);
     return visitas.map((v) => ({ ...v }));
   }
 }
 
 /**
- * Retorna la cantidad de lugares ÚNICOS/DISTINTOS que se han visitado.
+ * Retorna la cantidad de lugares ÚNICOS/DISTINTOS visitados por ESE usuario.
  */
-export async function cantidadLugaresVisitados(db: SQLiteDatabase): Promise<number> {
+export async function cantidadLugaresVisitados(
+  db: SQLiteDatabase,
+  usuarioId: string
+): Promise<number> {
+  const userLimpio = usuarioId.trim();
   const resultado = await db.getFirstAsync<{ total: number }>(
-    'SELECT COUNT(DISTINCT TRIM(LOWER(lugarId))) as total FROM visitas'
+    'SELECT COUNT(DISTINCT TRIM(LOWER(lugarId))) as total FROM visitas WHERE TRIM(usuarioId) = ?',
+    [userLimpio]
   );
   return resultado?.total ?? 0;
 }
@@ -245,15 +320,22 @@ export async function actualizarFotoVisita(
 }
 
 /**
- * Sincroniza las visitas pendientes con el servidor cuando hay red disponible.
+ * Sincroniza las visitas pendientes del usuario activo con el servidor cuando hay red disponible.
  */
-export async function sincronizarColaVisitas(db: SQLiteDatabase): Promise<number> {
+export async function sincronizarColaVisitas(
+  db: SQLiteDatabase,
+  usuarioId: string
+): Promise<number> {
+  const userLimpio = usuarioId.trim();
   const pendientes = await db.getAllAsync<{
     id: string;
     lugarId: string;
     origen: OrigenVisita;
     fechaHora: string;
-  }>('SELECT id, lugarId, origen, fechaHora FROM visitas WHERE sincronizada = 0');
+  }>(
+    'SELECT id, lugarId, origen, fechaHora FROM visitas WHERE TRIM(usuarioId) = ? AND sincronizada = 0',
+    [userLimpio]
+  );
 
   if (pendientes.length === 0) return 0;
 

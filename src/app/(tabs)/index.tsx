@@ -49,6 +49,8 @@ export default function PantallaInicio() {
   const db = useSQLiteContext();
   const router = useRouter();
 
+  const usuarioIdActual = (user ?? "").trim().toLowerCase();
+
   // Consumimos la ubicación global desde el LocationContext
   const {
     ubicacionActual,
@@ -76,18 +78,17 @@ export default function PantallaInicio() {
   const [avisosDescartadosHoy, setAvisosDescartadosHoy] = useState<Set<string>>(new Set());
   const [registrandoGps, setRegistrandoGps] = useState<boolean>(false);
 
-  // Inicializar datos del backend y visitas previas
+  // Inicializar datos del backend y visitas previas en paralelo
   useEffect(() => {
-    async function inicializar() {
+    async function inicializarCatalogo() {
       try {
         const [respuestaLugares, respuestaCategorias, visitasGuardadas] = await Promise.all([
           obtenerLugares(),
           obtenerCategorias(),
-          obtenerVisitas(db),
+          usuarioIdActual ? obtenerVisitas(db, usuarioIdActual) : Promise.resolve([]),
         ]);
 
-
-// Tipado estricto para las respuestas de la API
+        // Tipado estricto para las respuestas de la API
         const listaLugares: Lugar[] = Array.isArray(respuestaLugares)
           ? respuestaLugares
           : (respuestaLugares as { datos?: Lugar[] }).datos ?? [];
@@ -104,15 +105,13 @@ export default function PantallaInicio() {
         );
         setLugaresVisitadosIds(ids);
       } catch (error) {
-        console.error("Error al inicializar datos:", error);
+        console.error("Error al inicializar catálogo y visitas:", error);
       } finally {
         setCargando(false);
       }
     }
-    inicializar();
-  }, [db]);
-
-  // --- TODOS LOS HOOKS (useMemo, etc.) DEBEN ESTAR ANTES DE CUALQUIER RETURN ---
+    inicializarCatalogo();
+  }, [db, usuarioIdActual]);
 
   // Detectar el lugar más cercano dentro del radio de 150 metros
   const lugarCercanoDetectado = useMemo(() => {
@@ -176,9 +175,7 @@ export default function PantallaInicio() {
     });
   }, [lugares, busquedaTexto, categoriaSeleccionada, ubicacionActual]);
 
-  // --- FIN DE LOS HOOKS ---
-
-  // Si está cargando o la ubicación GPS aún no llega, mostramos el indicador de forma segura
+  // Si está cargando o la ubicación GPS aún no llega
   if (cargando || !ubicacionActual) {
     return (
       <View style={[styles.centrado, { backgroundColor: colors.background }]}>
@@ -195,9 +192,23 @@ export default function PantallaInicio() {
     if (!lugarCercanoDetectado) return;
     const { lugar } = lugarCercanoDetectado;
 
+    if (!usuarioIdActual) {
+      Alert.alert(
+        "Iniciá sesión para registrar visitas",
+        "Necesitás iniciar sesión con tu cuenta para guardar lugares en Mi Recorrido.",
+        [
+          { text: "Ahora no", style: "cancel" },
+          {
+            text: "Iniciar sesión",
+            onPress: () => router.push("/login"),
+          },
+        ]
+      );
+      return;
+    }
+
     try {
       setRegistrandoGps(true);
-      const usuarioIdActual = typeof user === "string" ? user : "usr-201";
 
       const resultado = await registrarVisita(
         db,
