@@ -22,6 +22,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { obtenerLugares } from "../../servicios/lugares";
 import {
   cantidadLugaresVisitados,
+  hidratarVisitasDesdeApi,
   obtenerVisitasConLugar,
   registrarVisita,
   sincronizarColaVisitas,
@@ -62,7 +63,15 @@ export default function RecorridoScreen() {
   const db = useSQLiteContext();
   const networkState = useNetworkState();
   const { colors, theme } = useTheme();
-  const { isAuthenticated, cargando: cargandoAuth } = useAuth();
+  const auth = useAuth() as any;
+  const { isAuthenticated, cargando: cargandoAuth } = auth;
+
+  // Extraemos el identificador único del usuario logueado sin importar cómo lo nombre AuthContext
+  const usuarioObj = auth.usuario ?? auth.user ?? auth.sesion?.usuario;
+  const usuarioId: string =
+    typeof usuarioObj === "string"
+      ? usuarioObj
+      : String(usuarioObj?.id ?? usuarioObj?.email ?? "");
 
   const [visitas, setVisitas] = useState<VisitaConLugar[]>([]);
   const [lugaresDisponibles, setLugaresDisponibles] = useState<Lugar[]>([]);
@@ -74,23 +83,47 @@ export default function RecorridoScreen() {
   // Estado para controlar la visibilidad del modal de selección manual
   const [modalVisible, setModalVisible] = useState<boolean>(false);
 
-  // Recargar los datos desde SQLite al enfocar la pantalla
+  // Limpiar estado visual inmediatamente si cambia o se cierra el usuario
+  useEffect(() => {
+    if (!isAuthenticated || !usuarioId) {
+      setVisitas([]);
+      setDistintos(0);
+    }
+  }, [isAuthenticated, usuarioId]);
+
+  // Recargar los datos desde SQLite y sincronizar con GET / POST /yo/visitas
   const cargar = useCallback(async () => {
+    if (!isAuthenticated || !usuarioId) {
+      setVisitas([]);
+      setDistintos(0);
+      setCargando(false);
+      return;
+    }
+
     try {
       setCargando(true);
-      // 1. Si hay conexión y sesión, intentamos sincronizar pendientes primero
-      if (isAuthenticated) {
-        await sincronizarColaVisitas(db);
-      }
 
-      // 2. Leemos la lista actualizada desde SQLite
-      const [lista, cant] = await Promise.all([
-        obtenerVisitasConLugar(db),
-        cantidadLugaresVisitados(db),
+      // 1. Intentamos subir visitas pendientes de ESTE usuario
+      await sincronizarColaVisitas(db, usuarioId);
+
+      // 2. Leemos al instante desde SQLite filtrado por usuarioId (Offline-First)
+      const [listaLocal, cantLocal] = await Promise.all([
+        obtenerVisitasConLugar(db, usuarioId),
+        cantidadLugaresVisitados(db, usuarioId),
       ]);
-      setVisitas(lista);
-      setDistintos(cant);
+      setVisitas(listaLocal);
+      setDistintos(cantLocal);
 
+      // 3. Descargamos las visitas del servidor (GET /yo/visitas) y refrescamos
+      await hidratarVisitasDesdeApi(db, usuarioId);
+      const [listaActualizada, cantActualizada] = await Promise.all([
+        obtenerVisitasConLugar(db, usuarioId),
+        cantidadLugaresVisitados(db, usuarioId),
+      ]);
+      setVisitas(listaActualizada);
+      setDistintos(cantActualizada);
+
+      // 4. Actualizamos catálogo de lugares para el contador total y el modal manual
       try {
         const lugaresRes = await obtenerLugares(db);
         setLugaresDisponibles(lugaresRes.datos);
@@ -103,32 +136,34 @@ export default function RecorridoScreen() {
     } finally {
       setCargando(false);
     }
-  }, [db, isAuthenticated]);
+  }, [db, isAuthenticated, usuarioId]);
 
   useFocusEffect(
     useCallback(() => {
-      if (isAuthenticated) {
+      if (isAuthenticated && usuarioId) {
         cargar();
       } else {
+        setVisitas([]);
+        setDistintos(0);
         setCargando(false);
       }
-    }, [isAuthenticated, cargar])
+    }, [isAuthenticated, usuarioId, cargar])
   );
 
   // Sincroniza automáticamente cuando vuelve Internet, cuando volvés a la app,
   // o cada 8 segundos si quedó alguna visita en "Pendiente sync"
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !usuarioId) return;
 
     const intentarSincronizar = async () => {
       if (sincronizando) return;
       try {
         setSincronizando(true);
-        const procesadas = await sincronizarColaVisitas(db);
+        const procesadas = await sincronizarColaVisitas(db, usuarioId);
         if (procesadas > 0) {
           const [lista, cant] = await Promise.all([
-            obtenerVisitasConLugar(db),
-            cantidadLugaresVisitados(db),
+            obtenerVisitasConLugar(db, usuarioId),
+            cantidadLugaresVisitados(db, usuarioId),
           ]);
           setVisitas(lista);
           setDistintos(cant);
@@ -162,14 +197,16 @@ export default function RecorridoScreen() {
       subAppState.remove();
       if (intervalo) clearInterval(intervalo);
     };
-  }, [networkState.isInternetReachable, isAuthenticated, db, visitas]);
+  }, [networkState.isInternetReachable, isAuthenticated, usuarioId, db, visitas]);
 
-  // Guardar o actualizar visita manual en SQLite sin duplicar
+  // Guardar o actualizar visita manual en SQLite para el usuario logueado sin duplicar
   const handleRegistroManual = async (lugarId: string, nombreLugar: string) => {
+    if (!usuarioId) return;
+
     try {
       const resultado = await registrarVisita(
         db,
-        "usr-201",
+        usuarioId,
         lugarId,
         "manual",
         null,

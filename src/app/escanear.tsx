@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../hooks/useTheme";
+import { api } from "../servicios/api";
 import { obtenerLugarPorId } from "../servicios/lugares";
 import { registrarVisita } from "../servicios/visitas";
 
@@ -73,41 +74,66 @@ export default function EscanearScreen() {
     if (scanned) return; // Evita múltiples escaneos continuos
     setScanned(true);
 
-    // 1. Limpiamos espacios en blanco y llevamos a mayúsculas
-    const dataLimpia = data ? data.trim().toUpperCase() : "";
-
-    // 2. Validación anti-crash
-    if (!dataLimpia.startsWith("COLON:")) {
+    const usuarioIdActual = (user ?? "").trim().toLowerCase();
+    if (!usuarioIdActual) {
       Alert.alert(
-        "Código QR no válido",
-        "El código escaneado no pertenece a los carteles turísticos oficiales de Colón.",
-        [
-          {
-            text: "Reintentar",
-            onPress: () => setScanned(false),
-          },
-        ]
+        "Sesión requerida",
+        "Iniciá sesión para registrar visitas en tu recorrido.",
+        [{ text: "Volver", onPress: () => router.back() }]
       );
       return;
     }
 
-    // Extraer el id del lugar (ejemplo: "COLON:LUG-004" -> "lug-004")
-    const lugarId = dataLimpia.replace("COLON:", "").trim().toLowerCase();
+    const raw = data ? data.trim() : "";
+    const dataUpper = raw.toUpperCase();
+    let lugarId = "";
+    let nombreLugar = "";
+
+    // 1. Intentamos resolver vía API (GET /lugares/qr/:codigo) si hay red
+    if (raw) {
+      try {
+        const res = await api.get(`/lugares/qr/${encodeURIComponent(raw)}`);
+        if (res.data?.id) {
+          lugarId = String(res.data.id).trim().toLowerCase();
+          nombreLugar = res.data.nombre ?? lugarId;
+        }
+      } catch {
+        // Si está offline o el QR usa el formato local COLON:lug-xxx, seguimos al fallback local
+      }
+    }
+
+    // 2. Fallback local: validar prefijo COLON:
+    if (!lugarId) {
+      if (!dataUpper.startsWith("COLON:")) {
+        Alert.alert(
+          "Código QR no válido",
+          "El código escaneado no pertenece a los carteles turísticos oficiales de Colón.",
+          [
+            {
+              text: "Reintentar",
+              onPress: () => setScanned(false),
+            },
+          ]
+        );
+        return;
+      }
+      lugarId = dataUpper.replace("COLON:", "").trim().toLowerCase();
+    }
 
     try {
-      // Buscamos el nombre del lugar para mostrarlo en el cartel
-      const lugarData = await obtenerLugarPorId(lugarId, db);
-      const nombreLugar = lugarData?.nombre ?? lugarId;
-      const usuarioIdActual = typeof user === "string" ? user : "usr-201";
+      if (!nombreLugar) {
+        const lugarData = await obtenerLugarPorId(lugarId, db);
+        nombreLugar = lugarData?.nombre ?? lugarId;
+      }
 
-      // 3. Registrar o actualizar visita en SQLite sin duplicar
+      // 3. Registrar o actualizar visita en SQLite aislada por usuarioId
       const resultado = await registrarVisita(
         db,
         usuarioIdActual,
         lugarId,
         "qr",
         null,
-        null // Conservar foto o nota previa si ya existía
+        null
       );
 
       Alert.alert(

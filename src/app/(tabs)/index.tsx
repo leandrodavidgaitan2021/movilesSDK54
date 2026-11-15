@@ -49,6 +49,8 @@ export default function PantallaInicio() {
   const db = useSQLiteContext();
   const router = useRouter();
 
+  const usuarioIdActual = (user ?? "").trim().toLowerCase();
+
   const [lugares, setLugares] = useState<Lugar[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
@@ -104,15 +106,14 @@ export default function PantallaInicio() {
     obtenerUbicacionGPS();
   }, []);
 
-  // 2. Inicializar datos del backend y visitas previas
+  // 2. Inicializar lugares y categorías del backend
   useEffect(() => {
-    async function inicializar() {
+    async function inicializarCatalogo() {
       try {
-        const [respuestaLugares, respuestaCategorias, visitasGuardadas] = (await Promise.all([
-          obtenerLugares(),
+        const [respuestaLugares, respuestaCategorias] = (await Promise.all([
+          obtenerLugares(db),
           obtenerCategorias(),
-          obtenerVisitas(db),
-        ])) as [any, any, any[]];
+        ])) as [any, any];
 
         setLugares(respuestaLugares.datos || respuestaLugares);
         setCategorias(
@@ -120,19 +121,34 @@ export default function PantallaInicio() {
             ? respuestaCategorias
             : respuestaCategorias.datos || []
         );
+      } catch (error) {
+        console.error("Error al inicializar catálogo:", error);
+      } finally {
+        setCargando(false);
+      }
+    }
+    inicializarCatalogo();
+  }, [db]);
 
+  // 3. Cargar visitas previas aisladas por usuarioIdActual
+  useEffect(() => {
+    async function cargarVisitasUsuario() {
+      if (!usuarioIdActual) {
+        setLugaresVisitadosIds(new Set());
+        return;
+      }
+      try {
+        const visitasGuardadas = await obtenerVisitas(db, usuarioIdActual);
         const ids = new Set<string>(
           visitasGuardadas.map((v) => v.lugarId.trim().toLowerCase())
         );
         setLugaresVisitadosIds(ids);
       } catch (error) {
-        console.error("Error al inicializar datos:", error);
-      } finally {
-        setCargando(false);
+        console.error("Error al cargar visitas del usuario en Inicio:", error);
       }
     }
-    inicializar();
-  }, [db]);
+    cargarVisitasUsuario();
+  }, [db, usuarioIdActual]);
 
   // Detectar el lugar más cercano dentro del radio de 150 metros que aún no fue visitado ni descartado hoy
   const lugarCercanoDetectado = useMemo(() => {
@@ -168,9 +184,23 @@ export default function PantallaInicio() {
     if (!lugarCercanoDetectado) return;
     const { lugar } = lugarCercanoDetectado;
 
+    if (!usuarioIdActual) {
+      Alert.alert(
+        "Iniciá sesión para registrar visitas",
+        "Necesitás iniciar sesión con tu cuenta para guardar lugares en Mi Recorrido.",
+        [
+          { text: "Ahora no", style: "cancel" },
+          {
+            text: "Iniciar sesión",
+            onPress: () => router.push("/login"),
+          },
+        ]
+      );
+      return;
+    }
+
     try {
       setRegistrandoGps(true);
-      const usuarioIdActual = typeof user === "string" ? user : "usr-201";
 
       const resultado = await registrarVisita(
         db,
@@ -249,7 +279,7 @@ export default function PantallaInicio() {
       setInputLat(lat.toString());
       setInputLon(lon.toString());
       Alert.alert("GPS Activado", "Ubicación real sincronizada correctamente.");
-    } catch  {
+    } catch {
       Alert.alert("Error", "No se pudo obtener la posición actual del GPS.");
     }
   };
@@ -381,7 +411,7 @@ export default function PantallaInicio() {
 
       {/* 2. Mapa */}
       <View style={styles.mapaContainer}>
-        <MapaLugares  lugares={lugaresFiltrados} />
+        <MapaLugares lugares={lugaresFiltrados} />
       </View>
 
       {/* 3. Lista de lugares y filtros */}

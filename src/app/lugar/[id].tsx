@@ -39,6 +39,8 @@ export default function DetalleLugarScreen() {
   const { user } = useAuth();
   const { colors, theme } = useTheme();
 
+  const usuarioIdActual = (user ?? "").trim().toLowerCase();
+
   const [lugar, setLugar] = useState<Lugar | null>(null);
   const [cargando, setCargando] = useState<boolean>(true);
   const [esFav, setEsFav] = useState<boolean>(false);
@@ -58,13 +60,17 @@ export default function DetalleLugarScreen() {
           if (lugarData) {
             setLugar(lugarData);
 
+            // Resetear estados previos antes de verificar para el usuario actual
+            setYaVisitado(false);
+            setFotoUri(null);
+            setNota("");
+
             // Verificar si ya existe una visita previa del usuario autenticado
-            if (user) {
-              const visitas = await obtenerVisitas(db);
+            if (usuarioIdActual) {
+              const visitas = await obtenerVisitas(db, usuarioIdActual);
               const visitaPrevia = visitas.find(
                 (v) =>
-                  v.usuarioId === user &&
-                  v.lugarId.toLowerCase() === lugarData.id.toLowerCase()
+                  v.lugarId.trim().toLowerCase() === lugarData.id.trim().toLowerCase()
               );
 
               if (visitaPrevia) {
@@ -85,7 +91,7 @@ export default function DetalleLugarScreen() {
     if (id) {
       cargarDetalle();
     }
-  }, [id, db, user]);
+  }, [id, db, usuarioIdActual]);
 
   useEffect(() => {
     async function verificarFavorito() {
@@ -196,7 +202,7 @@ export default function DetalleLugarScreen() {
   // Guardar o actualizar Visita con Foto y Nota en SQLite sin duplicar el lugar
   const handleGuardarVisitaManual = async () => {
     if (!lugar) return;
-    if (!user) {
+    if (!usuarioIdActual) {
       Alert.alert(
         "Iniciá sesión para registrar visitas",
         "Podés explorar todos los lugares libremente, pero necesitás tu cuenta para guardar visitas y fotos en Mi Recorrido.",
@@ -220,7 +226,7 @@ export default function DetalleLugarScreen() {
 
       const resultado = await registrarVisita(
         db,
-        user,
+        usuarioIdActual,
         lugar.id,
         "manual",
         fotoUri,
@@ -419,6 +425,7 @@ export default function DetalleLugarScreen() {
         </View>
 
         {/* 5. SECCIÓN BITÁCORA: Foto y Nota Personalizada de la Visita */}
+        {Boolean(usuarioIdActual) && (
         <View
           style={[
             styles.cardRegistro,
@@ -494,6 +501,7 @@ export default function DetalleLugarScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+        )}
       </View>
     </ScrollView>
   );
