@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
   centrado: { flex: 1, justifyContent: "center", alignItems: "center" },
   textoCargando: { marginTop: 10, fontSize: 16 },
   mapaContainer: {
-    height: 250,
+    height: 300,
     width: "100%",
     zIndex: 1,
   },
