@@ -24,6 +24,7 @@ import { useLocation } from "../../hooks/useLocation";
 import { useTheme } from "../../hooks/useTheme";
 import { cambiarFavorito, esFavorito } from "../../servicios/favoritos";
 import { obtenerLugarPorId } from "../../servicios/lugares";
+import { hayConexionInternet } from "../../servicios/red";
 import { obtenerVisitas, registrarVisita } from "../../servicios/visitas";
 import { Lugar } from "../../tipos";
 
@@ -132,8 +133,26 @@ export default function DetalleLugarScreen() {
     setEsFav(nuevoEstado);
   }
 
-  function abrirGoogleMaps() {
+  async function abrirGoogleMaps() {
     if (!lugar || !lugar.coordenadas) return;
+
+    // Verificamos si hay conexión a internet antes de intentar abrir Google Maps
+    const conectado = await hayConexionInternet();
+
+    if (!conectado) {
+      Alert.alert(
+        "Sin conexión a internet",
+        "Google Maps requiere datos móviles para calcular rutas. Dirígete al mapa principal para ver la guía en línea recta (Modo Offline).",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Ir al Mapa",
+            onPress: () => router.replace("/(tabs)"),
+          },
+        ]
+      );
+      return;
+    }
 
     const { latitud: latDestino, longitud: lonDestino } = lugar.coordenadas;
     
@@ -350,7 +369,7 @@ export default function DetalleLugarScreen() {
         >
           <Ionicons name="navigate-outline" size={18} color="#2980b9" />
           <Text style={[styles.mapButtonText, { color: "#2980b9" }]}>
-            Cómo llegar (Abrir en Google Maps)
+            Cómo llegar (Google Maps / Línea Recta Offline)
           </Text>
         </TouchableOpacity>
 

@@ -28,7 +28,7 @@ export default function CabeceraInicio({ colors, theme }: Props) {
       ]}
     >
       <Text style={[styles.headerTitle, { color: colors.text }]}>
-        Colon - Secretaria de Turismo
+        Secretaria de Turismo - Colón
       </Text>
       <TouchableOpacity
         style={[

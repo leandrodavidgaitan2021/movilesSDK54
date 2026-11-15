@@ -1,5 +1,6 @@
+// src/components/MapaLugares.tsx
 import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Polyline } from "react-native-maps";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useRef, useEffect } from "react";
@@ -62,8 +63,10 @@ export default function MapaLugares({ lugares }: Props) {
     esUbicacionActual: boolean;
   } | null>(obtenerDatosUbicacionActual);
 
-  // Cada vez que 'ubicacionActual' cambie (por ejemplo, al tocar un chip de Colón o GPS),
-  // movemos la cámara del mapa automáticamente a las nuevas coordenadas.
+  // Estado separado para mantener la línea recta activa aunque se cierre el cartel
+  const [destinoRuta, setDestinoRuta] = useState<Lugar | null>(null);
+
+  // Cada vez que 'ubicacionActual' cambie, movemos la cámara del mapa
   useEffect(() => {
     if (ubicacionActual && mapRef.current) {
       mapRef.current.animateToRegion({
@@ -71,11 +74,10 @@ export default function MapaLugares({ lugares }: Props) {
         longitude: ubicacionActual.longitud,
         latitudeDelta: 0.03,
         longitudeDelta: 0.03,
-      }, 1000); // Duración de la animación en ms
+      }, 1000);
     }
   }, [ubicacionActual]);
 
-  // Si la ubicación aún es null, mostramos el indicador de carga
   if (!ubicacionActual) {
     return (
       <View style={[styles.mapContainer, styles.centrado]}>
@@ -148,12 +150,38 @@ export default function MapaLugares({ lugares }: Props) {
                     descripcionCorta: lugar.descripcionCorta,
                     esUbicacionActual: false,
                   });
+                  // Fijamos el destino de la ruta de forma independiente al cartel
+                  setDestinoRuta(lugar);
                 }
               }}
             />
           );
         })}
+
+        {/* LÍNEA RECTA OFFLINE: Permanece visible aunque cierres el cartel */}
+        {destinoRuta && (
+          <Polyline
+            coordinates={[
+              { latitude: ubicacionActual.latitud, longitude: ubicacionActual.longitud },
+              { latitude: destinoRuta.coordenadas.latitud, longitude: destinoRuta.coordenadas.longitud },
+            ]}
+            strokeColor="#FF3B30"
+            strokeWidth={4}
+            lineDashPattern={[6, 6]}
+          />
+        )}
       </MapView>
+
+      {/* Botón flotante para limpiar la ruta cuando el usuario lo desee */}
+      {destinoRuta && (
+        <TouchableOpacity
+          style={styles.btnLimpiarRuta}
+          onPress={() => setDestinoRuta(null)}
+        >
+          <Ionicons name="close-circle" size={16} color="#fff" />
+          <Text style={styles.btnLimpiarRutaTexto}>Quitar línea</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Globo flotante */}
       {lugarSeleccionado && (
@@ -287,6 +315,12 @@ const styles = StyleSheet.create({
     color: "#666",
     lineHeight: 18,
   },
+  textoOffline: {
+    fontSize: 11,
+    fontWeight: "bold",
+    color: "#FF3B30",
+    marginTop: 4,
+  },
   closeButton: {
     padding: 4,
   },
@@ -304,5 +338,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "bold",
     color: "#007AFF",
+  },
+  btnLimpiarRuta: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    backgroundColor: "#FF3B30",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    gap: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 10,
+  },
+  btnLimpiarRutaTexto: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "bold",
   },
 });
