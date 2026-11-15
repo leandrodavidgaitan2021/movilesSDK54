@@ -6,6 +6,7 @@ import * as SecureStore from "expo-secure-store";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -17,6 +18,7 @@ import {
 import * as z from "zod";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../hooks/useTheme";
+import { apiRegistrar } from "../servicios/auth";
 
 const registerSchema = z
   .object({
@@ -60,17 +62,31 @@ export default function RegisterScreen() {
 
   const handleRegister = async (data: RegisterFormData) => {
     try {
-      const tokenDelServidor = "jwt_token_generado_por_el_backend_123";
+      // Llamada real al endpoint /auth/registro con el DTO correcto
+      const respuesta = await apiRegistrar({
+        nombre: data.nombre,
+        email: data.email,
+        contrasena: data.password,
+      });
 
-      await SecureStore.setItemAsync("user_token", tokenDelServidor);
-      await SecureStore.setItemAsync("user_email", data.email);
+      const { email, nombre } = respuesta.usuario;
 
-      login(data.email, tokenDelServidor);
-      alert(`¡Registro exitoso! Bienvenido, ${data.nombre}`);
+      // Guardamos opcionalmente en SecureStore si tu app lo requiere
+      await SecureStore.setItemAsync("user_token", respuesta.token);
+      await SecureStore.setItemAsync("user_email", email);
+
+      // Iniciamos sesión en el contexto global
+      await login(email, respuesta.token);
+
+      Alert.alert("¡Registro exitoso!", `Bienvenido, ${nombre}`);
       router.replace("/(tabs)/perfil");
-    } catch (error) {
-      console.error("Error al guardar la sesión de registro:", error);
-      alert("Ocurrió un error al guardar las credenciales de forma segura.");
+    } catch (error: any) {
+      console.error("Error al registrarse:", error);
+      const mensajeError =
+        error.response?.data?.mensaje ||
+        error.response?.data?.error ||
+        "No se pudo completar el registro con el servidor. Inténtalo de nuevo.";
+      Alert.alert("Error de registro", mensajeError);
     }
   };
 

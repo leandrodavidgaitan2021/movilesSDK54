@@ -20,6 +20,7 @@ import {
 } from "react-native";
 
 import { useAuth } from "../../hooks/useAuth";
+import { useLocation } from "../../hooks/useLocation";
 import { useTheme } from "../../hooks/useTheme";
 import { cambiarFavorito, esFavorito } from "../../servicios/favoritos";
 import { obtenerLugarPorId } from "../../servicios/lugares";
@@ -37,6 +38,7 @@ export default function DetalleLugarScreen() {
   const router = useRouter();
   const db = useSQLiteContext();
   const { user } = useAuth();
+  const { ubicacionActual } = useLocation();
   const { colors, theme } = useTheme();
 
   const usuarioIdActual = (user ?? "").trim().toLowerCase();
@@ -134,8 +136,10 @@ export default function DetalleLugarScreen() {
     if (!lugar || !lugar.coordenadas) return;
 
     const { latitud: latDestino, longitud: lonDestino } = lugar.coordenadas;
-    const latOrigen = -32.21568;
-    const lonOrigen = -58.13649;
+    
+    // Obtenemos las coordenadas desde el LocationContext (ubicación actual o simulada)
+    const latOrigen = ubicacionActual ? ubicacionActual.latitud : -32.21568;
+    const lonOrigen = ubicacionActual ? ubicacionActual.longitud : -58.13649;
 
     const url = Platform.select({
       ios: `maps://app?saddr=${latOrigen},${lonOrigen}&daddr=${latDestino},${lonDestino}`,
