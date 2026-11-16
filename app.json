@@ -59,7 +59,7 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Permite usar Face ID para ingresar de forma rápida."
+          "faceIDPermission": "Permite usar Face ID para ingresar de forma rápida y segura a la cuenta."
         }
       ],
       "expo-secure-store",
