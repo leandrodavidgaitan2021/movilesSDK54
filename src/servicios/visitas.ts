@@ -3,7 +3,6 @@ import { type SQLiteDatabase } from 'expo-sqlite';
 import { OrigenVisita, Visita } from '../tipos';
 import { api } from './api';
 
-
 export interface VisitaConLugar extends Visita {
   lugar?: {
     nombre: string;
@@ -15,10 +14,27 @@ export interface ResultadoRegistroVisita extends Visita {
   esNueva: boolean;
 }
 
+/**
+ * Formatea una fecha al estándar requerido por la API: "2026-11-14T21:00:00-03:00"
+ */
+function formatearFechaLocalApi(fecha: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const anio = fecha.getFullYear();
+  const mes = pad(fecha.getMonth() + 1);
+  const dia = pad(fecha.getDate());
+  const horas = pad(fecha.getHours());
+  const minutos = pad(fecha.getMinutes());
+  const segundos = pad(fecha.getSeconds());
 
- 
- //para que las imágenes del servidor carguen en dispositivos físicos.
- 
+  const offsetMinutos = -fecha.getTimezoneOffset();
+  const signo = offsetMinutos >= 0 ? '+' : '-';
+  const absOffset = Math.abs(offsetMinutos);
+  const offsetHoras = pad(Math.floor(absOffset / 60));
+  const offsetMins = pad(absOffset % 60);
+
+  return `${anio}-${mes}-${dia}T${horas}:${minutos}:${segundos}${signo}${offsetHoras}:${offsetMins}`;
+}
+
 function normalizarUrlApi(url: string | null | undefined): string | null {
   if (!url) return null;
   const baseUrl = (api.defaults.baseURL ?? '').replace(/\/$/, '');
@@ -28,40 +44,46 @@ function normalizarUrlApi(url: string | null | undefined): string | null {
   return url;
 }
 
-
- //Sube una foto local (file://...) a POST /archivos y devuelve la fotoUri pública asignada por la API.
- 
+/**
+ * Sube una foto local (file://...) a POST /archivos usando el interceptor de Axios.
+ */
 async function subirFotoAApi(fotoUri: string): Promise<string | null> {
   if (!fotoUri.startsWith('file://')) return normalizarUrlApi(fotoUri);
 
   const nombreArchivo = fotoUri.split('/').pop() || `visita-${Date.now()}.jpg`;
-  const formData = new FormData();
+  const extension = nombreArchivo.split('.').pop()?.toLowerCase();
+  const mimeType =
+    extension === 'png'
+      ? 'image/png'
+      : extension === 'webp'
+      ? 'image/webp'
+      : 'image/jpeg';
 
+  const formData = new FormData();
   formData.append('archivo', {
     uri: fotoUri,
     name: nombreArchivo,
-    type: 'image/jpeg',
+    type: mimeType,
   } as any);
 
-  const res = await api.post('/archivos', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  const res = await api.post('/archivos', formData);
 
   const payload = res.data?.datos ?? res.data;
   const baseUrl = (api.defaults.baseURL ?? '').replace(/\/$/, '');
 
   const uriDevuelta =
-    payload?.fotoUri ??
     payload?.url ??
+    payload?.fotoUri ??
     (payload?.clave && baseUrl ? `${baseUrl}/archivos/${payload.clave}` : null);
 
   return normalizarUrlApi(uriDevuelta);
 }
 
-
- 
- //sube el archivo (POST /archivos) y lo vincula mediante PATCH /yo/visitas/:id.
- 
+/**
+ * 1. Si hay foto local, la sube primero a POST /archivos para obtener la URL pública.
+ * 2. Busca si ya existe una visita en la API para ese lugarId; si existe usa PATCH /yo/visitas/:id,
+ *    y si no existe crea una nueva con POST /yo/visitas.
+ */
 async function enviarVisitaAApi(
   lugarId: string,
   origen: OrigenVisita,
@@ -70,26 +92,68 @@ async function enviarVisitaAApi(
   nota: string | null = null
 ): Promise<boolean> {
   try {
+    // Paso 1: Subir foto primero si es un archivo local
+    let urlFotoPublica: string | null = null;
+    if (fotoUri) {
+      urlFotoPublica = await subirFotoAApi(fotoUri);
+    }
+
+    // Asegurar formato de fecha con offset local (-03:00)
+    const fechaFormateada =
+      fechaHora.includes('Z') || !fechaHora.includes('-')
+        ? formatearFechaLocalApi(new Date(fechaHora))
+        : fechaHora;
+
+    // Paso 2: Verificar si el lugar ya tiene una visita registrada en la API para actualizarla
+    let visitaRemotaId: string | null = null;
+    try {
+      const resExistentes = await api.get('/yo/visitas', {
+        params: { porPagina: 100 },
+      });
+      const lista = resExistentes.data?.datos ?? [];
+      const yaExiste = lista.find(
+        (v: any) =>
+          (v.lugarId ?? '').toString().trim().toLowerCase() ===
+          lugarId.trim().toLowerCase()
+      );
+      if (yaExiste?.id) {
+        visitaRemotaId = String(yaExiste.id);
+      }
+    } catch {
+      // Si falla la consulta previa, continuamos intentando el POST
+    }
+
+    // Paso 3: Si ya existía en el servidor, actualizamos foto y nota con PATCH
+    if (visitaRemotaId) {
+      await api.patch(`/yo/visitas/${visitaRemotaId}`, {
+        ...(urlFotoPublica ? { fotoUri: urlFotoPublica } : {}),
+        ...(nota !== null ? { nota } : {}),
+      });
+      return true;
+    }
+
+    // Paso 4: Crear visita nueva con POST /yo/visitas
     const resVisita = await api.post('/yo/visitas', {
       lugarId,
       origen,
-      fechaHora,
+      fechaHora: fechaFormateada,
+      ...(urlFotoPublica ? { fotoUri: urlFotoPublica } : {}),
+      ...(nota ? { nota } : {}),
     });
 
-    const visitaRemota = resVisita.data?.datos ?? resVisita.data;
-    const visitaRemotaId = visitaRemota?.id;
+    // Respaldo: si el POST creó la visita pero ignoró fotoUri/nota en el body inicial,
+    // hacemos el PATCH inmediatamente con el ID devuelto.
+    const visitaCreada = resVisita.data?.datos ?? resVisita.data;
+    if (visitaCreada?.id && (urlFotoPublica || nota)) {
+      const faltaFoto = urlFotoPublica && !visitaCreada.fotoUri;
+      const faltaNota = nota && !visitaCreada.nota;
 
-    if (visitaRemotaId && (fotoUri || nota)) {
-      let fotoRemotaUri: string | null = null;
-
-      if (fotoUri) {
-        fotoRemotaUri = await subirFotoAApi(fotoUri);
+      if (faltaFoto || faltaNota) {
+        await api.patch(`/yo/visitas/${visitaCreada.id}`, {
+          ...(faltaFoto ? { fotoUri: urlFotoPublica } : {}),
+          ...(faltaNota ? { nota } : {}),
+        });
       }
-
-      await api.patch(`/yo/visitas/${visitaRemotaId}`, {
-        ...(fotoRemotaUri ? { fotoUri: fotoRemotaUri } : {}),
-        ...(nota ? { nota } : {}),
-      });
     }
 
     return true;
@@ -97,15 +161,15 @@ async function enviarVisitaAApi(
     console.warn(
       'Fallo sincronizando visita/foto con la API:',
       error?.response?.status,
-      error?.response?.data ?? error?.message
+      JSON.stringify(error?.response?.data ?? error?.message)
     );
     return false;
   }
 }
 
-
- //Descarga las visitas del usuario desde GET /yo/visitas y las guarda en SQLite
- 
+/**
+ * Descarga las visitas del usuario desde GET /yo/visitas y las guarda en SQLite
+ */
 export async function hidratarVisitasDesdeApi(
   db: SQLiteDatabase,
   usuarioId: string
@@ -131,8 +195,11 @@ export async function hidratarVisitasDesdeApi(
       );
 
       if (!existente) {
-        const idVisita = item.id ? String(item.id) : `vis-api-${userLimpio}-${lugarId}-${Date.now()}`;
-        const fechaHora = item.fechaHora ?? item.creadoEn ?? new Date().toISOString();
+        const idVisita = item.id
+          ? String(item.id)
+          : `vis-api-${userLimpio}-${lugarId}-${Date.now()}`;
+        const fechaHora =
+          item.fechaHora ?? item.creadoEn ?? formatearFechaLocalApi();
         const origen: OrigenVisita = item.origen ?? 'manual';
         const nota = item.nota ?? null;
         const fotoUri = normalizarUrlApi(item.fotoUri ?? item.fotoUrl ?? null);
@@ -158,9 +225,10 @@ export async function hidratarVisitasDesdeApi(
   }
 }
 
-
- //Registra una nueva visita o actualiza la existente en SQLite para ESTE usuario,sin duplicar el lugar ni pisar visitas de otros usuarios.
- 
+/**
+ * Registra una nueva visita o actualiza la existente en SQLite para ESTE usuario,
+ * sin duplicar el lugar ni pisar visitas de otros usuarios.
+ */
 export async function registrarVisita(
   db: SQLiteDatabase,
   usuarioId: string,
@@ -169,7 +237,7 @@ export async function registrarVisita(
   fotoUri: string | null = null,
   nota: string | null = null
 ): Promise<ResultadoRegistroVisita> {
-  const ahora = new Date().toISOString();
+  const ahora = formatearFechaLocalApi();
   const lugarIdLimpio = lugarId.trim();
   const userLimpio = usuarioId.trim();
 
@@ -202,7 +270,15 @@ export async function registrarVisita(
       `UPDATE visitas 
        SET fechaHora = ?, origen = ?, fotoUri = ?, nota = ?, sincronizada = ? 
        WHERE id = ? AND TRIM(usuarioId) = ?`,
-      [ahora, origen, fotoFinal, notaFinal, sincronizadaConApi ? 1 : 0, existente.id, userLimpio]
+      [
+        ahora,
+        origen,
+        fotoFinal,
+        notaFinal,
+        sincronizadaConApi ? 1 : 0,
+        existente.id,
+        userLimpio,
+      ]
     );
 
     return {
@@ -218,7 +294,7 @@ export async function registrarVisita(
     };
   }
 
-  //  Si el lugar no estaba en el recorrido de este usuario, creamos un registro nuevo
+  // Si el lugar no estaba en el recorrido de este usuario, creamos un registro nuevo
   const nuevaVisita: Visita = {
     id: `vis-${Date.now()}`,
     usuarioId: userLimpio,
@@ -251,9 +327,9 @@ export async function registrarVisita(
   };
 }
 
-
- //Obtiene únicamente las visitas del usuario activo en orden descendente.
- 
+/**
+ * Obtiene únicamente las visitas del usuario activo en orden descendente.
+ */
 export async function obtenerVisitas(
   db: SQLiteDatabase,
   usuarioId: string
@@ -352,7 +428,10 @@ export async function obtenerVisitasConLugar(
 
     return unicas;
   } catch (e) {
-    console.warn('No se pudo realizar el LEFT JOIN con lugares_cache, usando fallback:', e);
+    console.warn(
+      'No se pudo realizar el LEFT JOIN con lugares_cache, usando fallback:',
+      e
+    );
     const visitas = await obtenerVisitas(db, userLimpio);
     return visitas.map((v) => ({ ...v }));
   }
@@ -419,7 +498,9 @@ export async function sincronizarColaVisitas(
       item.nota
     );
     if (ok) {
-      await db.runAsync('UPDATE visitas SET sincronizada = 1 WHERE id = ?', [item.id]);
+      await db.runAsync('UPDATE visitas SET sincronizada = 1 WHERE id = ?', [
+        item.id,
+      ]);
       marcadas++;
     }
   }
