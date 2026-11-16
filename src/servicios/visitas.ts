@@ -1,9 +1,9 @@
 // src/servicios/visitas.ts
 import { type SQLiteDatabase } from 'expo-sqlite';
-import { OrigenVisita, Visita } from '../tipos/visitas';
+import { OrigenVisita, Visita } from '../tipos';
 import { api } from './api';
 
-// Interface extendida que incluye los datos del lugar
+
 export interface VisitaConLugar extends Visita {
   lugar?: {
     nombre: string;
@@ -15,25 +15,87 @@ export interface ResultadoRegistroVisita extends Visita {
   esNueva: boolean;
 }
 
-/**
- * Envía una visita al backend usando la instancia configurada de Axios.
- * Retorna true si el servidor respondió con éxito, false si está offline o el servidor falló.
- */
+
+ 
+ //para que las imágenes del servidor carguen en dispositivos físicos.
+ 
+function normalizarUrlApi(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const baseUrl = (api.defaults.baseURL ?? '').replace(/\/$/, '');
+  if (baseUrl && url.startsWith('http://localhost:3000')) {
+    return url.replace('http://localhost:3000', baseUrl);
+  }
+  return url;
+}
+
+
+ //Sube una foto local (file://...) a POST /archivos y devuelve la fotoUri pública asignada por la API.
+ 
+async function subirFotoAApi(fotoUri: string): Promise<string | null> {
+  if (!fotoUri.startsWith('file://')) return normalizarUrlApi(fotoUri);
+
+  const nombreArchivo = fotoUri.split('/').pop() || `visita-${Date.now()}.jpg`;
+  const formData = new FormData();
+
+  formData.append('archivo', {
+    uri: fotoUri,
+    name: nombreArchivo,
+    type: 'image/jpeg',
+  } as any);
+
+  const res = await api.post('/archivos', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+  const payload = res.data?.datos ?? res.data;
+  const baseUrl = (api.defaults.baseURL ?? '').replace(/\/$/, '');
+
+  const uriDevuelta =
+    payload?.fotoUri ??
+    payload?.url ??
+    (payload?.clave && baseUrl ? `${baseUrl}/archivos/${payload.clave}` : null);
+
+  return normalizarUrlApi(uriDevuelta);
+}
+
+
+ 
+ //sube el archivo (POST /archivos) y lo vincula mediante PATCH /yo/visitas/:id.
+ 
 async function enviarVisitaAApi(
   lugarId: string,
   origen: OrigenVisita,
-  fechaHora: string
+  fechaHora: string,
+  fotoUri: string | null = null,
+  nota: string | null = null
 ): Promise<boolean> {
   try {
-    await api.post('/yo/visitas', {
+    const resVisita = await api.post('/yo/visitas', {
       lugarId,
       origen,
       fechaHora,
     });
+
+    const visitaRemota = resVisita.data?.datos ?? resVisita.data;
+    const visitaRemotaId = visitaRemota?.id;
+
+    if (visitaRemotaId && (fotoUri || nota)) {
+      let fotoRemotaUri: string | null = null;
+
+      if (fotoUri) {
+        fotoRemotaUri = await subirFotoAApi(fotoUri);
+      }
+
+      await api.patch(`/yo/visitas/${visitaRemotaId}`, {
+        ...(fotoRemotaUri ? { fotoUri: fotoRemotaUri } : {}),
+        ...(nota ? { nota } : {}),
+      });
+    }
+
     return true;
   } catch (error: any) {
     console.warn(
-      "Fallo POST /yo/visitas:",
+      'Fallo sincronizando visita/foto con la API:',
       error?.response?.status,
       error?.response?.data ?? error?.message
     );
@@ -41,10 +103,9 @@ async function enviarVisitaAApi(
   }
 }
 
-/**
- * Descarga las visitas del usuario desde GET /yo/visitas y las guarda en SQLite
- * aisladas por usuarioId sin pisar fotos o notas locales.
- */
+
+ //Descarga las visitas del usuario desde GET /yo/visitas y las guarda en SQLite
+ 
 export async function hidratarVisitasDesdeApi(
   db: SQLiteDatabase,
   usuarioId: string
@@ -54,7 +115,9 @@ export async function hidratarVisitasDesdeApi(
 
   try {
     const res = await api.get('/yo/visitas');
-    const lista = Array.isArray(res.data) ? res.data : res.data?.items ?? [];
+    const lista = Array.isArray(res.data)
+      ? res.data
+      : res.data?.datos ?? res.data?.items ?? [];
 
     for (const item of lista) {
       const lugarId = (item.lugarId ?? item.lugar?.id ?? '').toString().trim();
@@ -72,7 +135,7 @@ export async function hidratarVisitasDesdeApi(
         const fechaHora = item.fechaHora ?? item.creadoEn ?? new Date().toISOString();
         const origen: OrigenVisita = item.origen ?? 'manual';
         const nota = item.nota ?? null;
-        const fotoUri = item.fotoUrl ?? item.fotoUri ?? null;
+        const fotoUri = normalizarUrlApi(item.fotoUri ?? item.fotoUrl ?? null);
 
         await db.runAsync(
           `INSERT OR IGNORE INTO visitas 
@@ -89,16 +152,15 @@ export async function hidratarVisitasDesdeApi(
     }
   } catch (error: any) {
     console.warn(
-      "No se pudo hidratar GET /yo/visitas (modo offline):",
+      'No se pudo hidratar GET /yo/visitas (modo offline):',
       error?.response?.status ?? error?.message
     );
   }
 }
 
-/**
- * Registra una nueva visita o actualiza la existente en SQLite para ESTE usuario
- * sin duplicar el lugar ni pisar visitas de otros usuarios.
- */
+
+ //Registra una nueva visita o actualiza la existente en SQLite para ESTE usuario,sin duplicar el lugar ni pisar visitas de otros usuarios.
+ 
 export async function registrarVisita(
   db: SQLiteDatabase,
   usuarioId: string,
@@ -110,8 +172,6 @@ export async function registrarVisita(
   const ahora = new Date().toISOString();
   const lugarIdLimpio = lugarId.trim();
   const userLimpio = usuarioId.trim();
-
-  const sincronizadaConApi = await enviarVisitaAApi(lugarIdLimpio, origen, ahora);
 
   // 1. Verificar si ESTE usuario ya tiene este lugar en su recorrido
   const existente = await db.getFirstAsync<{
@@ -126,10 +186,18 @@ export async function registrarVisita(
     [userLimpio, lugarIdLimpio]
   );
 
-  if (existente) {
-    const fotoFinal = fotoUri ?? existente.fotoUri;
-    const notaFinal = nota ?? existente.nota;
+  const fotoFinal = fotoUri ?? existente?.fotoUri ?? null;
+  const notaFinal = nota ?? existente?.nota ?? null;
 
+  const sincronizadaConApi = await enviarVisitaAApi(
+    lugarIdLimpio,
+    origen,
+    ahora,
+    fotoFinal,
+    notaFinal
+  );
+
+  if (existente) {
     await db.runAsync(
       `UPDATE visitas 
        SET fechaHora = ?, origen = ?, fotoUri = ?, nota = ?, sincronizada = ? 
@@ -150,15 +218,15 @@ export async function registrarVisita(
     };
   }
 
-  // 2. Si el lugar no estaba en el recorrido de este usuario, creamos un registro nuevo
+  //  Si el lugar no estaba en el recorrido de este usuario, creamos un registro nuevo
   const nuevaVisita: Visita = {
     id: `vis-${Date.now()}`,
     usuarioId: userLimpio,
     lugarId: lugarIdLimpio,
     fechaHora: ahora,
     origen,
-    fotoUri,
-    nota,
+    fotoUri: fotoFinal,
+    nota: notaFinal,
     sincronizada: sincronizadaConApi,
   };
 
@@ -183,9 +251,9 @@ export async function registrarVisita(
   };
 }
 
-/**
- * Obtiene únicamente las visitas del usuario activo en orden descendente.
- */
+
+ //Obtiene únicamente las visitas del usuario activo en orden descendente.
+ 
 export async function obtenerVisitas(
   db: SQLiteDatabase,
   usuarioId: string
@@ -284,7 +352,7 @@ export async function obtenerVisitasConLugar(
 
     return unicas;
   } catch (e) {
-    console.warn("No se pudo realizar el LEFT JOIN con lugares_cache, usando fallback:", e);
+    console.warn('No se pudo realizar el LEFT JOIN con lugares_cache, usando fallback:', e);
     const visitas = await obtenerVisitas(db, userLimpio);
     return visitas.map((v) => ({ ...v }));
   }
@@ -332,8 +400,10 @@ export async function sincronizarColaVisitas(
     lugarId: string;
     origen: OrigenVisita;
     fechaHora: string;
+    fotoUri: string | null;
+    nota: string | null;
   }>(
-    'SELECT id, lugarId, origen, fechaHora FROM visitas WHERE TRIM(usuarioId) = ? AND sincronizada = 0',
+    'SELECT id, lugarId, origen, fechaHora, fotoUri, nota FROM visitas WHERE TRIM(usuarioId) = ? AND sincronizada = 0',
     [userLimpio]
   );
 
@@ -341,7 +411,13 @@ export async function sincronizarColaVisitas(
 
   let marcadas = 0;
   for (const item of pendientes) {
-    const ok = await enviarVisitaAApi(item.lugarId, item.origen, item.fechaHora);
+    const ok = await enviarVisitaAApi(
+      item.lugarId,
+      item.origen,
+      item.fechaHora,
+      item.fotoUri,
+      item.nota
+    );
     if (ok) {
       await db.runAsync('UPDATE visitas SET sincronizada = 1 WHERE id = ?', [item.id]);
       marcadas++;
