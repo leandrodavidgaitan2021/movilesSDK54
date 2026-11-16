@@ -181,7 +181,7 @@ export default function PantallaInicio() {
       <View style={[styles.centrado, { backgroundColor: colors.background }]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[styles.textoCargando, { color: colors.textSecondary }]}>
-          Cargando Guía Turística y GPS...
+          Cargando Guía de Turística Colón
         </Text>
       </View>
     );

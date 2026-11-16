@@ -136,15 +136,14 @@ export default function DetalleLugarScreen() {
   async function abrirGoogleMaps() {
     if (!lugar || !lugar.coordenadas) return;
 
-    // Verificamos si hay conexión a internet antes de intentar abrir Google Maps
+    // 1. Verificar conexión antes de intentar abrir Google Maps
     const conectado = await hayConexionInternet();
-
     if (!conectado) {
       Alert.alert(
         "Sin conexión a internet",
-        "Google Maps requiere datos móviles para calcular rutas. Dirígete al mapa principal para ver la guía en línea recta (Modo Offline).",
+        "Google Maps necesita datos móviles para trazar rutas. Podés usar el mapa principal de la app para guiarte en línea recta sin conexión.",
         [
-          { text: "Cancelar", style: "cancel" },
+          { text: "Cerrar", style: "cancel" },
           {
             text: "Ir al Mapa",
             onPress: () => router.replace("/(tabs)"),
@@ -155,7 +154,7 @@ export default function DetalleLugarScreen() {
     }
 
     const { latitud: latDestino, longitud: lonDestino } = lugar.coordenadas;
-    
+
     // Obtenemos las coordenadas desde el LocationContext (ubicación actual o simulada)
     const latOrigen = ubicacionActual ? ubicacionActual.latitud : -32.21568;
     const lonOrigen = ubicacionActual ? ubicacionActual.longitud : -58.13649;
@@ -167,17 +166,16 @@ export default function DetalleLugarScreen() {
 
     const urlWeb = `https://www.google.com/maps/dir/?api=1&origin=${latOrigen},${lonOrigen}&destination=${latDestino},${lonDestino}`;
 
-    Linking.canOpenURL(url!)
-      .then((supported) => {
-        if (supported) {
-          Linking.openURL(url!);
-        } else {
-          Linking.openURL(urlWeb);
-        }
-      })
-      .catch(() => {
-        Linking.openURL(urlWeb);
-      });
+    try {
+      const supported = url ? await Linking.canOpenURL(url) : false;
+      if (supported && url) {
+        await Linking.openURL(url);
+      } else {
+        await Linking.openURL(urlWeb);
+      }
+    } catch {
+      await Linking.openURL(urlWeb);
+    }
   }
 
   // Capturar foto y guardar persistentemente en expo-file-system
@@ -198,23 +196,29 @@ export default function DetalleLugarScreen() {
         quality: 0.7,
       });
 
-      if (!resultado.canceled && resultado.assets[0].uri) {
+      if (!resultado.canceled && resultado.assets[0]?.uri) {
         const uriTemporal = resultado.assets[0].uri;
 
-        // Copiar a almacenamiento permanente del dispositivo
-        const carpetaFotos = new Directory(Paths.document, "fotos_visitas");
-        if (!carpetaFotos.exists) {
-          carpetaFotos.create();
+        try {
+          // Copiar a almacenamiento permanente del dispositivo
+          const carpetaFotos = new Directory(Paths.document, "fotos_visitas");
+          if (!carpetaFotos.exists) {
+            carpetaFotos.create();
+          }
+
+          const archivoTemp = new File(uriTemporal);
+          const archivoDefinitivo = new File(
+            carpetaFotos,
+            `visita_${Date.now()}.jpg`
+          );
+          archivoTemp.copy(archivoDefinitivo);
+
+          setFotoUri(archivoDefinitivo.uri);
+        } catch (fsError) {
+          // Fallback seguro si falla la copia en disco
+          console.warn("No se pudo copiar al directorio permanente, usando URI temporal:", fsError);
+          setFotoUri(uriTemporal);
         }
-
-        const archivoTemp = new File(uriTemporal);
-        const archivoDefinitivo = new File(
-          carpetaFotos,
-          `visita_${Date.now()}.jpg`
-        );
-        archivoTemp.copy(archivoDefinitivo);
-
-        setFotoUri(archivoDefinitivo.uri);
       }
     } catch (error) {
       console.error("Error capturando foto:", error);
@@ -222,7 +226,7 @@ export default function DetalleLugarScreen() {
     }
   };
 
-  // Guardar o actualizar Visita con Foto y Nota en SQLite sin duplicar el lugar
+  // Guardar o actualizar Visita con Foto y Nota en SQLite y sincronizar con API
   const handleGuardarVisitaManual = async () => {
     if (!lugar) return;
     if (!usuarioIdActual) {
@@ -257,13 +261,21 @@ export default function DetalleLugarScreen() {
       );
 
       setYaVisitado(true);
+      if (resultado.fotoUri) {
+        setFotoUri(resultado.fotoUri);
+      }
 
-      Alert.alert(
-        resultado.esNueva ? "¡Visita registrada!" : "¡Bitácora actualizada!",
-        resultado.esNueva
-          ? "El lugar, tu foto y tu nota se han guardado en Mi Recorrido."
-          : "Se actualizó la foto y nota de este lugar sin duplicarlo en Mi Recorrido."
-      );
+      const tituloAlerta = resultado.esNueva
+        ? "¡Visita registrada!"
+        : "¡Bitácora actualizada!";
+
+      const mensajeAlerta = resultado.sincronizada
+        ? resultado.esNueva
+          ? "El lugar, tu foto y tu nota se guardaron y sincronizaron en la nube."
+          : "Se actualizó la foto y nota de este lugar en la nube."
+        : "Se guardó en tu teléfono (modo sin conexión). Se sincronizará automáticamente cuando vuelvas a tener señal.";
+
+      Alert.alert(tituloAlerta, mensajeAlerta);
     } catch (error) {
       console.error("Error guardando visita:", error);
       Alert.alert("Error", "No se pudo registrar la visita en la base de datos.");
@@ -449,81 +461,81 @@ export default function DetalleLugarScreen() {
 
         {/* 5. SECCIÓN BITÁCORA: Foto y Nota Personalizada de la Visita */}
         {Boolean(usuarioIdActual) && (
-        <View
-          style={[
-            styles.cardRegistro,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              borderWidth: theme === "dark" ? 1 : 0,
-            },
-          ]}
-        >
-          <Text style={[styles.cardTitulo, { color: colors.text }]}>
-            {yaVisitado
-              ? "Bitácora de este lugar (Ya en tu recorrido)"
-              : "Bitácora personal de la visita"}
-          </Text>
-
-          {/* Botón Tomar Foto */}
-          <TouchableOpacity
+          <View
             style={[
-              styles.btnFoto,
+              styles.cardRegistro,
               {
-                backgroundColor: theme === "dark" ? "#1e3a29" : "#e8f8f0",
-              },
-            ]}
-            onPress={tomarFoto}
-          >
-            <Ionicons name="camera-outline" size={20} color={colors.primary} />
-            <Text style={[styles.btnFotoTexto, { color: colors.primary }]}>
-              {fotoUri ? "Tomar nueva foto" : "Tomar foto en este lugar"}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Previsualización de Foto Tomada */}
-          {fotoUri ? (
-            <Image source={{ uri: fotoUri }} style={styles.fotoPreview} />
-          ) : null}
-
-          {/* Campo para Escribir Nota Corta */}
-          <TextInput
-            style={[
-              styles.inputNota,
-              {
-                backgroundColor: theme === "dark" ? "#2a2a2a" : "#fafafa",
-                color: colors.text,
+                backgroundColor: colors.card,
                 borderColor: colors.border,
+                borderWidth: theme === "dark" ? 1 : 0,
               },
             ]}
-            placeholder="Escribe una nota corta sobre tu visita..."
-            placeholderTextColor={colors.textSecondary}
-            value={nota}
-            onChangeText={setNota}
-            maxLength={200}
-            multiline
-          />
-
-          {/* Botón Guardar en Mi Recorrido */}
-          <TouchableOpacity
-            style={[
-              styles.btnGuardar,
-              { backgroundColor: colors.primary },
-              guardandoVisita && { opacity: 0.7 },
-            ]}
-            onPress={handleGuardarVisitaManual}
-            disabled={guardandoVisita}
           >
-            <Ionicons name="bookmark-outline" size={18} color="#fff" />
-            <Text style={styles.btnGuardarTexto}>
-              {guardandoVisita
-                ? "Guardando..."
-                : yaVisitado
-                ? "Actualizar foto y nota"
-                : "Registrar en Mi Recorrido"}
+            <Text style={[styles.cardTitulo, { color: colors.text }]}>
+              {yaVisitado
+                ? "Bitácora de este lugar (Ya en tu recorrido)"
+                : "Bitácora personal de la visita"}
             </Text>
-          </TouchableOpacity>
-        </View>
+
+            {/* Botón Tomar Foto */}
+            <TouchableOpacity
+              style={[
+                styles.btnFoto,
+                {
+                  backgroundColor: theme === "dark" ? "#1e3a29" : "#e8f8f0",
+                },
+              ]}
+              onPress={tomarFoto}
+            >
+              <Ionicons name="camera-outline" size={20} color={colors.primary} />
+              <Text style={[styles.btnFotoTexto, { color: colors.primary }]}>
+                {fotoUri ? "Tomar nueva foto" : "Tomar foto en este lugar"}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Previsualización de Foto Tomada */}
+            {fotoUri ? (
+              <Image source={{ uri: fotoUri }} style={styles.fotoPreview} />
+            ) : null}
+
+            {/* Campo para Escribir Nota Corta */}
+            <TextInput
+              style={[
+                styles.inputNota,
+                {
+                  backgroundColor: theme === "dark" ? "#2a2a2a" : "#fafafa",
+                  color: colors.text,
+                  borderColor: colors.border,
+                },
+              ]}
+              placeholder="Escribe una nota corta sobre tu visita..."
+              placeholderTextColor={colors.textSecondary}
+              value={nota}
+              onChangeText={setNota}
+              maxLength={200}
+              multiline
+            />
+
+            {/* Botón Guardar en Mi Recorrido */}
+            <TouchableOpacity
+              style={[
+                styles.btnGuardar,
+                { backgroundColor: colors.primary },
+                guardandoVisita && { opacity: 0.7 },
+              ]}
+              onPress={handleGuardarVisitaManual}
+              disabled={guardandoVisita}
+            >
+              <Ionicons name="bookmark-outline" size={18} color="#fff" />
+              <Text style={styles.btnGuardarTexto}>
+                {guardandoVisita
+                  ? "Guardando..."
+                  : yaVisitado
+                  ? "Actualizar foto y nota"
+                  : "Registrar en Mi Recorrido"}
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
     </ScrollView>
