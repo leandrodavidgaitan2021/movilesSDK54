@@ -443,7 +443,7 @@ export default function RecorridoScreen() {
                       style={[styles.badge, { backgroundColor: "#f39c1222" }]}
                     >
                       <Text style={[styles.badgeText, { color: "#e67e22" }]}>
-                        Pendiente sync
+                        Pendiente
                       </Text>
                     </View>
                   ) : (
