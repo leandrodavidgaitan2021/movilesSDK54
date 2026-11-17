@@ -20,16 +20,15 @@ import {
   actualizarCategoriasFavoritas,
   extraerCategoriasFavoritas,
   obtenerMiPerfil,
-  PerfilUsuario,
 } from "../../servicios/usuario";
-import { Categoria } from "../../tipos";
+import { Categoria, Usuario } from "../../tipos";
 
 export default function PerfilScreen() {
   const router = useRouter();
   const { colors, theme } = useTheme();
   const { user, cargando, token, logout } = useAuth();
   const { sensor, activa, activar, desactivar } = useLoginBiometrico();
-  const [perfil, setPerfil] = useState<PerfilUsuario | null>(null);
+  const [perfil, setPerfil] = useState<Usuario | null>(null);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [favoritasIds, setFavoritasIds] = useState<string[]>([]);
   const [cargandoPerfil, setCargandoPerfil] = useState<boolean>(false);

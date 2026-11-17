@@ -1,36 +1,22 @@
 // src/servicios/usuario.ts
 import { api } from "./api";
-
-export interface PreferenciasUsuario {
-  categoriasFavoritas: string[];
-  avisarProximidad?: boolean;
-  radioAvisoMetros?: number;
-  tema?: string;
-}
-
-export interface PerfilUsuario {
-  id: string;
-  email: string;
-  nombre?: string;
-  avatarUrl?: string | null;
-  preferencias?: PreferenciasUsuario;
-}
+import { Usuario } from "../tipos";
 
 export function extraerCategoriasFavoritas(
-  perfil: PerfilUsuario | null,
+  perfil: Usuario | null,
 ): string[] {
   return perfil?.preferencias?.categoriasFavoritas ?? [];
 }
 
-export async function obtenerMiPerfil(): Promise<PerfilUsuario> {
+export async function obtenerMiPerfil(): Promise<Usuario> {
   const response = await api.get("/yo");
   return response.data.datos;
 }
 
 export async function actualizarCategoriasFavoritas(
-  perfilActual: PerfilUsuario | null,
+  perfilActual: Usuario | null,
   categoriasIds: string[],
-): Promise<PerfilUsuario> {
+): Promise<Usuario> {
   const payload = {
     preferencias: {
       ...perfilActual?.preferencias,
