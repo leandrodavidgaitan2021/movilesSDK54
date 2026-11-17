@@ -23,14 +23,6 @@ export default function AccesoRestringido({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Ionicons
-        name="lock-closed-outline"
-        size={64}
-        color={colors.textSecondary}
-      />
-      <Text style={[styles.title, { color: colors.text }]}>
-        Acceso restringido
-      </Text>
       <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
         {subtitulo}
       </Text>
@@ -38,7 +30,7 @@ export default function AccesoRestringido({
         style={[styles.button, { backgroundColor: colors.primary }]}
         onPress={handleIrAlLogin}
       >
-        <Text style={styles.buttonText}>Ir a Iniciar Sesión</Text>
+        <Text style={styles.buttonText}>Iniciar Sesión</Text>
       </TouchableOpacity>
     </View>
   );
@@ -58,7 +50,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 20,
     marginTop: 5,
     textAlign: "center",
     marginBottom: 20,
