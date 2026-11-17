@@ -78,16 +78,6 @@ export default function EscanearScreen() {
     if (scanned) return; // Evita múltiples escaneos continuos
     setScanned(true);
 
-    const usuarioIdActual = (user ?? "").trim().toLowerCase();
-    if (!usuarioIdActual) {
-      Alert.alert(
-        "Sesión requerida",
-        "Iniciá sesión para registrar visitas en tu recorrido.",
-        [{ text: "Volver", onPress: () => router.back() }]
-      );
-      return;
-    }
-
     const raw = data ? data.trim() : "";
     const dataUpper = raw.toUpperCase();
     let lugarId = "";
@@ -141,12 +131,27 @@ export default function EscanearScreen() {
       }
 
       // --- CASO A: ESCANEAR PARA VER LA FICHA DEL LUGAR ---
+      // (No requiere sesión, redirige directamente)
       if (esModoVer) {
         router.replace(`/lugar/${lugarId}`);
         return;
       }
 
       // --- CASO B: ESCANEAR PARA REGISTRAR VISITA (EN RECORRIDO) ---
+      // Aquí recién validamos si hay sesión activa, ya que el registro es personal
+      const usuarioIdActual = (user ?? "").trim().toLowerCase();
+      if (!usuarioIdActual) {
+        Alert.alert(
+          "Sesión requerida",
+          "Iniciá sesión para registrar visitas en tu recorrido.",
+          [
+            { text: "Cancelar", style: "cancel", onPress: () => setScanned(false) },
+            { text: "Iniciar sesión", onPress: () => router.push("/login") }
+          ]
+        );
+        return;
+      }
+
       const resultado = await registrarVisita(
         db,
         usuarioIdActual,
