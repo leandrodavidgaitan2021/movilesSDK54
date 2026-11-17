@@ -45,7 +45,7 @@ function normalizarUrlApi(url: string | null | undefined): string | null {
 }
 
 /**
- * Sube una foto local (file://...) a POST /archivos usando el interceptor de Axios.
+ * Sube una foto local (file://...) a POST /archivos usando Axios.
  */
 async function subirFotoAApi(fotoUri: string): Promise<string | null> {
   if (!fotoUri.startsWith('file://')) return normalizarUrlApi(fotoUri);
@@ -66,23 +66,28 @@ async function subirFotoAApi(fotoUri: string): Promise<string | null> {
     type: mimeType,
   } as any);
 
-  const res = await api.post('/archivos', formData);
+  try {
+    const res = await api.post('/archivos', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
 
-  const payload = res.data?.datos ?? res.data;
-  const baseUrl = (api.defaults.baseURL ?? '').replace(/\/$/, '');
+    const payload = res.data?.datos ?? res.data;
+    const baseUrl = (api.defaults.baseURL ?? '').replace(/\/$/, '');
 
-  const uriDevuelta =
-    payload?.url ??
-    payload?.fotoUri ??
-    (payload?.clave && baseUrl ? `${baseUrl}/archivos/${payload.clave}` : null);
+    const uriDevuelta =
+      payload?.url ??
+      payload?.fotoUri ??
+      (payload?.clave && baseUrl ? `${baseUrl}/archivos/${payload.clave}` : null);
 
-  return normalizarUrlApi(uriDevuelta);
+    return normalizarUrlApi(uriDevuelta);
+  } catch (error) {
+    console.warn('Error al subir foto a la API:', error);
+    return null;
+  }
 }
 
 /**
- * 1. Si hay foto local, la sube primero a POST /archivos para obtener la URL pública.
- * 2. Busca si ya existe una visita en la API para ese lugarId; si existe usa PATCH /yo/visitas/:id,
- *    y si no existe crea una nueva con POST /yo/visitas.
+ * Sube o actualiza la visita en la API de forma directa y robusta.
  */
 async function enviarVisitaAApi(
   lugarId: string,
@@ -92,71 +97,64 @@ async function enviarVisitaAApi(
   nota: string | null = null
 ): Promise<boolean> {
   try {
-    // Paso 1: Subir foto primero si es un archivo local
+    // 1. Subir foto primero si es un archivo local
     let urlFotoPublica: string | null = null;
     if (fotoUri) {
       urlFotoPublica = await subirFotoAApi(fotoUri);
     }
 
-    // Asegurar formato de fecha con offset local (-03:00)
     const fechaFormateada =
       fechaHora.includes('Z') || !fechaHora.includes('-')
         ? formatearFechaLocalApi(new Date(fechaHora))
         : fechaHora;
 
-    // Paso 2: Verificar si el lugar ya tiene una visita registrada en la API para actualizarla
-    let visitaRemotaId: string | null = null;
+    // 2. Intentar registrar la visita directamente mediante POST
     try {
-      const resExistentes = await api.get('/yo/visitas', {
-        params: { porPagina: 100 },
-      });
-      const lista = resExistentes.data?.datos ?? [];
-      const yaExiste = lista.find(
-        (v: any) =>
-          (v.lugarId ?? '').toString().trim().toLowerCase() ===
-          lugarId.trim().toLowerCase()
-      );
-      if (yaExiste?.id) {
-        visitaRemotaId = String(yaExiste.id);
-      }
-    } catch {
-      // Si falla la consulta previa, continuamos intentando el POST
-    }
-
-    // Paso 3: Si ya existía en el servidor, actualizamos foto y nota con PATCH
-    if (visitaRemotaId) {
-      await api.patch(`/yo/visitas/${visitaRemotaId}`, {
+      const resVisita = await api.post('/yo/visitas', {
+        lugarId,
+        origen,
+        fechaHora: fechaFormateada,
         ...(urlFotoPublica ? { fotoUri: urlFotoPublica } : {}),
-        ...(nota !== null ? { nota } : {}),
+        ...(nota ? { nota } : {}),
       });
-      return true;
-    }
 
-    // Paso 4: Crear visita nueva con POST /yo/visitas
-    const resVisita = await api.post('/yo/visitas', {
-      lugarId,
-      origen,
-      fechaHora: fechaFormateada,
-      ...(urlFotoPublica ? { fotoUri: urlFotoPublica } : {}),
-      ...(nota ? { nota } : {}),
-    });
+      const visitaCreada = resVisita.data?.datos ?? resVisita.data;
+      
+      // Respaldo por si el servidor creó el registro pero omitió algún campo opcional
+      if (visitaCreada?.id && (urlFotoPublica || nota)) {
+        const faltaFoto = urlFotoPublica && !visitaCreada.fotoUri;
+        const faltaNota = nota && !visitaCreada.nota;
 
-    // Respaldo: si el POST creó la visita pero ignoró fotoUri/nota en el body inicial,
-    // hacemos el PATCH inmediatamente con el ID devuelto.
-    const visitaCreada = resVisita.data?.datos ?? resVisita.data;
-    if (visitaCreada?.id && (urlFotoPublica || nota)) {
-      const faltaFoto = urlFotoPublica && !visitaCreada.fotoUri;
-      const faltaNota = nota && !visitaCreada.nota;
-
-      if (faltaFoto || faltaNota) {
-        await api.patch(`/yo/visitas/${visitaCreada.id}`, {
-          ...(faltaFoto ? { fotoUri: urlFotoPublica } : {}),
-          ...(faltaNota ? { nota } : {}),
-        });
+        if (faltaFoto || faltaNota) {
+          await api.patch(`/yo/visitas/${visitaCreada.id}`, {
+            ...(faltaFoto ? { fotoUri: urlFotoPublica } : {}),
+            ...(faltaNota ? { nota } : {}),
+          });
+        }
       }
-    }
+      return true;
+    } catch (errPost: any) {
+      // Si el POST falla porque la visita ya existe en el servidor (ej. 400 o 409 Conflict),
+      // buscamos su ID en el listado para actualizarla mediante PATCH.
+      if (errPost?.response?.status === 400 || errPost?.response?.status === 409 || errPost?.response?.status === 422) {
+        const resExistentes = await api.get('/yo/visitas', { params: { porPagina: 100 } });
+        const lista = resExistentes.data?.datos ?? resExistentes.data ?? [];
+        const yaExiste = lista.find(
+          (v: any) =>
+            (v.lugarId ?? v.lugar?.id ?? '').toString().trim().toLowerCase() ===
+            lugarId.trim().toLowerCase()
+        );
 
-    return true;
+        if (yaExiste?.id) {
+          await api.patch(`/yo/visitas/${yaExiste.id}`, {
+            ...(urlFotoPublica ? { fotoUri: urlFotoPublica } : {}),
+            ...(nota !== null ? { nota } : {}),
+          });
+          return true;
+        }
+      }
+      throw errPost;
+    }
   } catch (error: any) {
     console.warn(
       'Fallo sincronizando visita/foto con la API:',
@@ -294,7 +292,7 @@ export async function registrarVisita(
     };
   }
 
-  // Si el lugar no estaba en el recorrido de este usuario, creamos un registro nuevo
+  // Si el lugar no estava en el recorrido de este usuario, creamos un registro nuevo
   const nuevaVisita: Visita = {
     id: `vis-${Date.now()}`,
     usuarioId: userLimpio,
@@ -356,34 +354,13 @@ export async function obtenerVisitas(
 }
 
 /**
- * Obtiene las visitas del usuario activo realizando un LEFT JOIN con `lugares_cache`,
- * asegurando que no se muestren lugares duplicados ni de otros usuarios.
+ * Obtiene las visitas del usuario activo realizando un LEFT JOIN con `lugares_cache`.
  */
 export async function obtenerVisitasConLugar(
   db: SQLiteDatabase,
   usuarioId: string
 ): Promise<VisitaConLugar[]> {
   const userLimpio = usuarioId.trim();
-
-  try {
-    await db.runAsync(`
-      DELETE FROM visitas
-      WHERE id NOT IN (
-        SELECT id FROM (
-          SELECT id,
-                 ROW_NUMBER() OVER (
-                   PARTITION BY TRIM(usuarioId), TRIM(LOWER(lugarId))
-                   ORDER BY (CASE WHEN fotoUri IS NOT NULL THEN 1 ELSE 0 END) DESC,
-                            (CASE WHEN nota IS NOT NULL THEN 1 ELSE 0 END) DESC,
-                            fechaHora DESC
-                 ) as rn
-          FROM visitas
-        ) WHERE rn = 1
-      )
-    `);
-  } catch {
-    // Fallback si la versión de SQLite no soporta ROW_NUMBER
-  }
 
   try {
     const filas = await db.getAllAsync<{

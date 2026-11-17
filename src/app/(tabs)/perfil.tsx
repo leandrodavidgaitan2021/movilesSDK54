@@ -96,7 +96,7 @@ export default function PerfilScreen() {
 
   if (!user) {
     return (
-      <AccesoRestringido subtitulo="Inicia sesión para ver tu perfil, preferencias y lugares guardados offline." />
+      <AccesoRestringido subtitulo="Inicia sesión para ver tu perfil y preferencias." />
     );
   }
 

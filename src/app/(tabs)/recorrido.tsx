@@ -66,7 +66,7 @@ export default function RecorridoScreen() {
   const auth = useAuth() as any;
   const { isAuthenticated, cargando: cargandoAuth } = auth;
 
-  // Extraemos el identificador único del usuario logueado sin importar cómo lo nombre AuthContext
+  // Extraemos el identificador único del usuario logueado
   const usuarioObj = auth.usuario ?? auth.user ?? auth.sesion?.usuario;
   const usuarioId: string =
     typeof usuarioObj === "string"
@@ -83,15 +83,17 @@ export default function RecorridoScreen() {
   // Estado para controlar la visibilidad del modal de selección manual
   const [modalVisible, setModalVisible] = useState<boolean>(false);
 
-  // Limpiar estado visual inmediatamente si cambia o se cierra el usuario
+  // Limpiar estado visual inmediatamente si cambia o se desloguea el usuario
   useEffect(() => {
     if (!isAuthenticated || !usuarioId) {
       setVisitas([]);
       setDistintos(0);
+      setTotalLugares(0);
+      setLugaresDisponibles([]);
     }
   }, [isAuthenticated, usuarioId]);
 
-  // Recargar los datos desde SQLite y sincronizar con GET / POST /yo/visitas
+  // Recargar los datos (Offline-First seguro ante deslogueo o falta de red)
   const cargar = useCallback(async () => {
     if (!isAuthenticated || !usuarioId) {
       setVisitas([]);
@@ -103,10 +105,18 @@ export default function RecorridoScreen() {
     try {
       setCargando(true);
 
-      // 1. Intentamos subir visitas pendientes de ESTE usuario
-      await sincronizarColaVisitas(db, usuarioId);
+      const tieneRed = Boolean(networkState.isInternetReachable);
 
-      // 2. Leemos al instante desde SQLite filtrado por usuarioId (Offline-First)
+      // 1. Si hay red, intentamos sincronizar cola pendiente del usuario
+      if (tieneRed) {
+        try {
+          await sincronizarColaVisitas(db, usuarioId);
+        } catch (errSync) {
+          console.warn("No se pudo sincronizar la cola al cargar:", errSync);
+        }
+      }
+
+      // 2. Leemos al instante desde SQLite filtrado por usuarioId (Garantiza acceso Offline)
       const [listaLocal, cantLocal] = await Promise.all([
         obtenerVisitasConLugar(db, usuarioId),
         cantidadLugaresVisitados(db, usuarioId),
@@ -114,29 +124,35 @@ export default function RecorridoScreen() {
       setVisitas(listaLocal);
       setDistintos(cantLocal);
 
-      // 3. Descargamos las visitas del servidor (GET /yo/visitas) y refrescamos
-      await hidratarVisitasDesdeApi(db, usuarioId);
-      const [listaActualizada, cantActualizada] = await Promise.all([
-        obtenerVisitasConLugar(db, usuarioId),
-        cantidadLugaresVisitados(db, usuarioId),
-      ]);
-      setVisitas(listaActualizada);
-      setDistintos(cantActualizada);
+      // 3. Si hay red, descargamos las visitas del servidor (GET /yo/visitas)
+      if (tieneRed) {
+        try {
+          await hidratarVisitasDesdeApi(db, usuarioId);
+          const [listaActualizada, cantActualizada] = await Promise.all([
+            obtenerVisitasConLugar(db, usuarioId),
+            cantidadLugaresVisitados(db, usuarioId),
+          ]);
+          setVisitas(listaActualizada);
+          setDistintos(cantActualizada);
+        } catch (errHidratar) {
+          console.warn("No se pudo hidratar desde la API (modo offline):", errHidratar);
+        }
+      }
 
-      // 4. Actualizamos catálogo de lugares para el contador total y el modal manual
+      // 4. Actualizamos catálogo de lugares (si falla usa caché o se omite)
       try {
         const lugaresRes = await obtenerLugares(db);
         setLugaresDisponibles(lugaresRes.datos);
         setTotalLugares(lugaresRes.meta.total);
       } catch (errLugares) {
-        console.warn("No se pudieron actualizar lugares (usando caché):", errLugares);
+        console.warn("No se pudieron actualizar lugares:", errLugares);
       }
     } catch (e) {
       console.error("Error cargando recorrido desde SQLite:", e);
     } finally {
       setCargando(false);
     }
-  }, [db, isAuthenticated, usuarioId]);
+  }, [db, isAuthenticated, usuarioId, networkState.isInternetReachable]);
 
   useFocusEffect(
     useCallback(() => {
@@ -150,17 +166,16 @@ export default function RecorridoScreen() {
     }, [isAuthenticated, usuarioId, cargar])
   );
 
-  // Sincroniza automáticamente cuando vuelve Internet, cuando volvés a la app,
-  // o cada 8 segundos si quedó alguna visita en "Pendiente sync"
+  // Sincroniza automáticamente cuando vuelve Internet o la app pasa a primer plano
   useEffect(() => {
-    if (!isAuthenticated || !usuarioId) return;
+    if (!isAuthenticated || !usuarioId || !networkState.isInternetReachable) return;
 
     const intentarSincronizar = async () => {
-      if (sincronizando) return;
+      if (sincronizando || !isAuthenticated || !usuarioId) return;
       try {
         setSincronizando(true);
         const procesadas = await sincronizarColaVisitas(db, usuarioId);
-        if (procesadas > 0) {
+        if (procesadas > 0 && isAuthenticated && usuarioId) {
           const [lista, cant] = await Promise.all([
             obtenerVisitasConLugar(db, usuarioId),
             cantidadLugaresVisitados(db, usuarioId),
@@ -175,21 +190,16 @@ export default function RecorridoScreen() {
       }
     };
 
-    // 1. Disparo inmediato si cambió la red
-    if (networkState.isInternetReachable) {
-      intentarSincronizar();
-    }
+    intentarSincronizar();
 
-    // 2. Disparo al volver a primer plano desde el panel de Wi-Fi/Modo Avión del celular
     const subAppState = AppState.addEventListener("change", (estado) => {
-      if (estado === "active") {
+      if (estado === "active" && isAuthenticated && usuarioId) {
         intentarSincronizar();
       }
     });
 
-    // 3. Reintento automático cada 8 segundos SOLO si hay pendientes en pantalla
     const hayPendientes = visitas.some((v) => !v.sincronizada);
-    const intervalo = hayPendientes
+    const intervalo = hayPendientes && isAuthenticated && usuarioId
       ? setInterval(intentarSincronizar, 8000)
       : null;
 
@@ -197,7 +207,7 @@ export default function RecorridoScreen() {
       subAppState.remove();
       if (intervalo) clearInterval(intervalo);
     };
-  }, [networkState.isInternetReachable, isAuthenticated, usuarioId, db, visitas]);
+  }, [networkState.isInternetReachable, isAuthenticated, usuarioId, db, visitas, sincronizando]);
 
   // Guardar o actualizar visita manual en SQLite para el usuario logueado sin duplicar
   const handleRegistroManual = async (lugarId: string, nombreLugar: string) => {
@@ -247,7 +257,7 @@ export default function RecorridoScreen() {
   // 2. Si NO está logueado, cortamos acá y mostramos Acceso Restringido
   if (!isAuthenticated) {
     return (
-      <AccesoRestringido subtitulo="Inicia sesión para ver tu bitácora de viaje, progreso y lugares visitados en Colón." />
+      <AccesoRestringido subtitulo="Inicia sesión para ver tus lugares visitados en Colón." />
     );
   }
 

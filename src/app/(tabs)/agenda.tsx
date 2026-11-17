@@ -69,7 +69,7 @@ export default function AgendaScreen() {
   const handleToggleGuardar = async (eventoId: string) => {
     if (!isAuthenticated) {
       Alert.alert(
-        "Acceso Requerido",
+        "Inicio de sesión requerido",
         "Debes iniciar sesión para guardar eventos en tu agenda personal.",
         [
           { text: "Cancelar", style: "cancel" },
@@ -114,7 +114,7 @@ export default function AgendaScreen() {
   const cambiarFiltro = (tipo: "todos" | "hoy" | "guardados") => {
     if (tipo === "guardados" && !isAuthenticated) {
       Alert.alert(
-        "Acceso Requerido",
+        "Inicio de sesión requerido",
         "Inicia sesión para ver tus eventos guardados.",
         [
           { text: "Cancelar", style: "cancel" },

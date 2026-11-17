@@ -47,6 +47,7 @@ export default function DetalleLugarScreen() {
   const [lugar, setLugar] = useState<Lugar | null>(null);
   const [cargando, setCargando] = useState<boolean>(true);
   const [esFav, setEsFav] = useState<boolean>(false);
+  const [tieneInternet, setTieneInternet] = useState<boolean>(true);
 
   // Estados para Foto y Nota de la Bitácora
   const [fotoUri, setFotoUri] = useState<string | null>(null);
@@ -57,6 +58,10 @@ export default function DetalleLugarScreen() {
   useEffect(() => {
     async function cargarDetalle() {
       try {
+        // Verificar conectividad al abrir el detalle
+        const conectado = await hayConexionInternet();
+        setTieneInternet(conectado);
+
         if (typeof id === "string") {
           const idSanitizado = id.replace(/[)(\s]/g, "").trim().toLowerCase();
           const lugarData = await obtenerLugarPorId(idSanitizado, db);
@@ -364,8 +369,10 @@ export default function DetalleLugarScreen() {
           </Text>
         </View>
 
-        {/* 2. Reproductor de Audioguía */}
-        <ReproductorAudio audioguia={lugar.audioguia} colors={colors} />
+        {/* 2. Reproductor de Audioguía (Solo se muestra si hay conexión a internet y el lugar tiene audioguía) */}
+        {tieneInternet && lugar.audioguia && (
+          <ReproductorAudio audioguia={lugar.audioguia} colors={colors} />
+        )}
 
         {/* Botón Cómo llegar */}
         <TouchableOpacity

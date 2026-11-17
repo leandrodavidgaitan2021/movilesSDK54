@@ -1,11 +1,12 @@
 // src/components/MapaLugares.tsx
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Platform, Linking } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useRef, useEffect } from "react";
 import { Lugar } from "../tipos";
 import { useLocation } from "../hooks/useLocation";
+import { hayConexionInternet } from "../servicios/red";
 
 interface Props {
   lugares: Lugar[]; 
@@ -66,7 +67,20 @@ export default function MapaLugares({ lugares }: Props) {
   // Estado separado para mantener la línea recta activa aunque se cierre el cartel
   const [destinoRuta, setDestinoRuta] = useState<Lugar | null>(null);
 
-  // Cada vez que 'ubicacionActual' cambie, movemos la cámara del mapa
+  // Centrar la cámara en la ubicación actual del usuario
+  const centrarEnUbicacionActual = () => {
+    if (ubicacionActual && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: ubicacionActual.latitud,
+        longitude: ubicacionActual.longitud,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      }, 800);
+      setLugarSeleccionado(obtenerDatosUbicacionActual());
+    }
+  };
+
+  // Cada vez que 'ubicacionActual' cambie al inicio, movemos la cámara del mapa
   useEffect(() => {
     if (ubicacionActual && mapRef.current) {
       mapRef.current.animateToRegion({
@@ -77,6 +91,40 @@ export default function MapaLugares({ lugares }: Props) {
       }, 1000);
     }
   }, [ubicacionActual]);
+
+  // Función para abrir Google Maps externo o app de mapas nativa
+  const abrirNavegacionExterna = async (lugarDestino: { latitud: number; longitud: number }) => {
+    if (!ubicacionActual) return;
+
+    const conectado = await hayConexionInternet();
+    const latOrigen = ubicacionActual.latitud;
+    const lonOrigen = ubicacionActual.longitud;
+    const latDestino = lugarDestino.latitud;
+    const lonDestino = lugarDestino.longitud;
+
+    if (!conectado) {
+      // Si no hay red, la app ya muestra la línea recta roja en el mapa, avisamos al usuario
+      return;
+    }
+
+    const url = Platform.select({
+      ios: `maps://app?saddr=${latOrigen},${lonOrigen}&daddr=${latDestino},${lonDestino}`,
+      android: `https://www.google.com/maps/dir/?api=1&origin=${latOrigen},${lonOrigen}&destination=${latDestino},${lonDestino}&travelmode=driving`,
+    });
+
+    const urlWeb = `https://www.google.com/maps/dir/?api=1&origin=${latOrigen},${lonOrigen}&destination=${latDestino},${lonDestino}`;
+
+    try {
+      const supported = url ? await Linking.canOpenURL(url) : false;
+      if (supported && url) {
+        await Linking.openURL(url);
+      } else {
+        await Linking.openURL(urlWeb);
+      }
+    } catch {
+      await Linking.openURL(urlWeb);
+    }
+  };
 
   if (!ubicacionActual) {
     return (
@@ -172,6 +220,19 @@ export default function MapaLugares({ lugares }: Props) {
         )}
       </MapView>
 
+      {/* Botón flotante para centrar en la ubicación actual (Estilo Google Maps) */}
+      <TouchableOpacity
+        style={[
+          styles.btnAccionFlotante,
+          styles.btnMiUbicacion,
+          destinoRuta ? { bottom: 75 } : { bottom: 20 },
+        ]}
+        onPress={centrarEnUbicacionActual}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="locate" size={22} color="#007AFF" />
+      </TouchableOpacity>
+
       {/* Botón flotante para limpiar la ruta cuando el usuario lo desee */}
       {destinoRuta && (
         <TouchableOpacity
@@ -216,13 +277,29 @@ export default function MapaLugares({ lugares }: Props) {
               </TouchableOpacity>
             </View>
 
+            {/* Acciones dentro del globo */}
             {!lugarSeleccionado.esUbicacionActual && (
-              <TouchableOpacity
-                style={styles.btnVerDetalle}
-                onPress={() => router.push(`/lugar/${lugarSeleccionado.id}`)}
-              >
-                <Text style={styles.btnVerDetalleTexto}>Ver detalle &rarr;</Text>
-              </TouchableOpacity>
+              <View style={styles.accionesGlobo}>
+                <TouchableOpacity
+                  style={styles.btnVerDetalle}
+                  onPress={() => router.push(`/lugar/${lugarSeleccionado.id}`)}
+                >
+                  <Text style={styles.btnVerDetalleTexto}>Ver detalle &rarr;</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.btnGoogleMaps}
+                  onPress={() => {
+                    const lugarObj = lugares.find((l) => l.id === lugarSeleccionado.id);
+                    if (lugarObj) {
+                      abrirNavegacionExterna(lugarObj.coordenadas);
+                    }
+                  }}
+                >
+                  <Ionicons name="navigate" size={14} color="#fff" />
+                  <Text style={styles.btnGoogleMapsTexto}>Google Maps</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
 
@@ -315,18 +392,16 @@ const styles = StyleSheet.create({
     color: "#666",
     lineHeight: 18,
   },
-  textoOffline: {
-    fontSize: 11,
-    fontWeight: "bold",
-    color: "#FF3B30",
-    marginTop: 4,
-  },
   closeButton: {
     padding: 4,
   },
-  btnVerDetalle: {
+  accionesGlobo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginTop: 10,
-    alignSelf: "flex-start",
+  },
+  btnVerDetalle: {
     backgroundColor: "#fff",
     paddingVertical: 6,
     paddingHorizontal: 10,
@@ -339,14 +414,47 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#007AFF",
   },
+  btnGoogleMaps: {
+    backgroundColor: "#007AFF",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    gap: 4,
+  },
+  btnGoogleMapsTexto: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  btnAccionFlotante: {
+    position: "absolute",
+    right: 20,
+    backgroundColor: "#fff",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 10,
+  },
+  btnMiUbicacion: {
+    // La posición inferior se ajusta dinámicamente si hay un botón activo arriba
+  },
   btnLimpiarRuta: {
     position: "absolute",
     bottom: 20,
-    right: 20,
+    right: 80,
     backgroundColor: "#FF3B30",
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 20,
     gap: 6,
