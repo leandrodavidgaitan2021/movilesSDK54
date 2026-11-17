@@ -166,48 +166,57 @@ export default function RecorridoScreen() {
     }, [isAuthenticated, usuarioId, cargar])
   );
 
-  // Sincroniza automáticamente cuando vuelve Internet o la app pasa a primer plano
+// Sincroniza y re-hidrata automáticamente cuando hay internet, pasa a primer plano o periódicamente
   useEffect(() => {
     if (!isAuthenticated || !usuarioId || !networkState.isInternetReachable) return;
 
-    const intentarSincronizar = async () => {
+    const sincronizarEHidratar = async () => {
       if (sincronizando || !isAuthenticated || !usuarioId) return;
       try {
         setSincronizando(true);
-        const procesadas = await sincronizarColaVisitas(db, usuarioId);
-        if (procesadas > 0 && isAuthenticated && usuarioId) {
-          const [lista, cant] = await Promise.all([
-            obtenerVisitasConLugar(db, usuarioId),
-            cantidadLugaresVisitados(db, usuarioId),
-          ]);
-          setVisitas(lista);
-          setDistintos(cant);
-        }
+        
+        // 1. Enviar pendientes locales si los hay
+        await sincronizarColaVisitas(db, usuarioId);
+
+        // 2. Descargar lo último de la nube (esto trae las notas/fotos actualizadas por otro dispositivo)
+        await hidratarVisitasDesdeApi(db, usuarioId);
+
+        // 3. Refrescar la interfaz localmente
+        const [lista, cant] = await Promise.all([
+          obtenerVisitasConLugar(db, usuarioId),
+          cantidadLugaresVisitados(db, usuarioId),
+        ]);
+        setVisitas(lista);
+        setDistintos(cant);
       } catch (error) {
-        console.warn("Error en sincronización automática:", error);
+        console.warn("Error en actualización automática:", error);
       } finally {
         setSincronizando(false);
       }
     };
 
-    intentarSincronizar();
+    // Ejecutar al montar o al recuperar red
+    sincronizarEHidratar();
 
+    // Escuchar si la app vuelve a primer plano
     const subAppState = AppState.addEventListener("change", (estado) => {
       if (estado === "active" && isAuthenticated && usuarioId) {
-        intentarSincronizar();
+        sincronizarEHidratar();
       }
     });
 
-    const hayPendientes = visitas.some((v) => !v.sincronizada);
-    const intervalo = hayPendientes && isAuthenticated && usuarioId
-      ? setInterval(intentarSincronizar, 8000)
-      : null;
+    // Intervalo cada 10 segundos para buscar cambios remotos hechos en otros dispositivos
+    const intervalo = setInterval(() => {
+      if (isAuthenticated && usuarioId && networkState.isInternetReachable) {
+        sincronizarEHidratar();
+      }
+    }, 10000);
 
     return () => {
       subAppState.remove();
-      if (intervalo) clearInterval(intervalo);
+      clearInterval(intervalo);
     };
-  }, [networkState.isInternetReachable, isAuthenticated, usuarioId, db, visitas, sincronizando]);
+  }, [networkState.isInternetReachable, isAuthenticated, usuarioId, db, sincronizando]);
 
   // Guardar o actualizar visita manual en SQLite para el usuario logueado sin duplicar
   const handleRegistroManual = async (lugarId: string, nombreLugar: string) => {

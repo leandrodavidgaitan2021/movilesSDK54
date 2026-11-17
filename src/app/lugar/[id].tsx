@@ -1,10 +1,14 @@
-// src/app/lugar/[id].tsx
+
 import { Ionicons } from "@expo/vector-icons";
 import { Directory, File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import {
+  useLocalSearchParams,
+  useRouter,
+  useFocusEffect,
+} from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -25,7 +29,11 @@ import { useTheme } from "../../hooks/useTheme";
 import { cambiarFavorito, esFavorito } from "../../servicios/favoritos";
 import { obtenerLugarPorId } from "../../servicios/lugares";
 import { hayConexionInternet } from "../../servicios/red";
-import { obtenerVisitas, registrarVisita } from "../../servicios/visitas";
+import {
+  hidratarVisitasDesdeApi,
+  obtenerVisitas,
+  registrarVisita,
+} from "../../servicios/visitas";
 import { Lugar } from "../../tipos";
 
 // Componentes modularizados
@@ -49,207 +57,141 @@ export default function DetalleLugarScreen() {
   const [esFav, setEsFav] = useState<boolean>(false);
   const [tieneInternet, setTieneInternet] = useState<boolean>(true);
 
-  // Estados para Foto y Nota de la Bitácora
+  // Estados de la bitácora.
   const [fotoUri, setFotoUri] = useState<string | null>(null);
   const [nota, setNota] = useState<string>("");
   const [guardandoVisita, setGuardandoVisita] = useState<boolean>(false);
   const [yaVisitado, setYaVisitado] = useState<boolean>(false);
 
-  useEffect(() => {
-    async function cargarDetalle() {
-      try {
-        // Verificar conectividad al abrir el detalle
-        const conectado = await hayConexionInternet();
-        setTieneInternet(conectado);
+  /**
+   * Carga el lugar y su bitácora cada vez que la pantalla recibe el foco.
+   *
+   * Con internet:
+   * 1. Descarga las visitas del servidor.
+   * 2. Actualiza SQLite.
+   * 3. Lee la información local actualizada.
+   *
+   * Sin internet:
+   * 1. Lee directamente SQLite.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      let activo = true;
 
-        if (typeof id === "string") {
-          const idSanitizado = id.replace(/[)(\s]/g, "").trim().toLowerCase();
-          const lugarData = await obtenerLugarPorId(idSanitizado, db);
-          if (lugarData) {
-            setLugar(lugarData);
+      async function cargarDetalle() {
+        try {
+          const conectado = await hayConexionInternet();
 
-            // Resetear estados previos antes de verificar para el usuario actual
+          if (!activo) return;
+
+          setTieneInternet(conectado);
+
+          if (conectado && usuarioIdActual) {
+            await hidratarVisitasDesdeApi(db, usuarioIdActual);
+          }
+
+          if (!activo) return;
+
+          if (typeof id !== "string") {
+            setLugar(null);
+            return;
+          }
+
+          const idSanitizado = id
+            .replace(/[)(\s]/g, "")
+            .trim()
+            .toLowerCase();
+
+          const lugarData = await obtenerLugarPorId(
+            idSanitizado,
+            db
+          );
+
+          if (!activo) return;
+
+          if (!lugarData) {
+            setLugar(null);
+            return;
+          }
+
+          setLugar(lugarData);
+
+          if (usuarioIdActual) {
+            const visitas = await obtenerVisitas(
+              db,
+              usuarioIdActual
+            );
+
+            if (!activo) return;
+
+            // Comparación exacta para evitar coincidencias
+            // incorrectas entre IDs de lugares.
+            const visitaPrevia = visitas.find(
+              (v) =>
+                v.lugarId.trim().toLowerCase() ===
+                lugarData.id.trim().toLowerCase()
+            );
+
+            setYaVisitado(Boolean(visitaPrevia));
+            setFotoUri(visitaPrevia?.fotoUri ?? null);
+            setNota(visitaPrevia?.nota ?? "");
+          } else {
             setYaVisitado(false);
             setFotoUri(null);
             setNota("");
-
-            // Verificar si ya existe una visita previa del usuario autenticado
-            if (usuarioIdActual) {
-              const visitas = await obtenerVisitas(db, usuarioIdActual);
-              const visitaPrevia = visitas.find(
-                (v) =>
-                  v.lugarId.trim().toLowerCase() === lugarData.id.trim().toLowerCase()
-              );
-
-              if (visitaPrevia) {
-                setYaVisitado(true);
-                if (visitaPrevia.fotoUri) setFotoUri(visitaPrevia.fotoUri);
-                if (visitaPrevia.nota) setNota(visitaPrevia.nota);
-              }
-            }
           }
-        }
-      } catch (error) {
-        console.error("Error al cargar el detalle del lugar:", error);
-      } finally {
-        setCargando(false);
-      }
-    }
-
-    if (id) {
-      cargarDetalle();
-    }
-  }, [id, db, usuarioIdActual]);
-
-  useEffect(() => {
-    async function verificarFavorito() {
-      if (lugar?.id && user) {
-        const favorito = await esFavorito(user, lugar.id);
-        setEsFav(favorito);
-      } else {
-        setEsFav(false);
-      }
-    }
-    verificarFavorito();
-  }, [lugar?.id, user]);
-
-  async function cambiarEstrella() {
-    if (!lugar) return;
-    if (!user) {
-      Alert.alert(
-        "Iniciá sesión para guardar en favoritos",
-        "Podés ver todos los lugares sin cuenta. La cuenta sirve para guardar tus favoritos y tu recorrido.",
-        [
-          { text: "Ahora no", style: "cancel" },
-          {
-            text: "Iniciar sesión",
-            onPress: () =>
-              router.push({
-                pathname: "/login",
-                params: { redirect: `/lugar/${lugar.id}` },
-              }),
-          },
-        ]
-      );
-      return;
-    }
-
-    const nuevoEstado = await cambiarFavorito(user, lugar.id);
-    setEsFav(nuevoEstado);
-  }
-
-  async function abrirGoogleMaps() {
-    if (!lugar || !lugar.coordenadas) return;
-
-    // 1. Verificar conexión antes de intentar abrir Google Maps
-    const conectado = await hayConexionInternet();
-    if (!conectado) {
-      Alert.alert(
-        "Sin conexión a internet",
-        "Google Maps necesita datos móviles para trazar rutas. Podés usar el mapa principal de la app para guiarte en línea recta sin conexión.",
-        [
-          { text: "Cerrar", style: "cancel" },
-          {
-            text: "Ir al Mapa",
-            onPress: () => router.replace("/(tabs)"),
-          },
-        ]
-      );
-      return;
-    }
-
-    const { latitud: latDestino, longitud: lonDestino } = lugar.coordenadas;
-
-    // Obtenemos las coordenadas desde el LocationContext (ubicación actual o simulada)
-    const latOrigen = ubicacionActual ? ubicacionActual.latitud : -32.21568;
-    const lonOrigen = ubicacionActual ? ubicacionActual.longitud : -58.13649;
-
-    const url = Platform.select({
-      ios: `maps://app?saddr=${latOrigen},${lonOrigen}&daddr=${latDestino},${lonDestino}`,
-      android: `https://www.google.com/maps/dir/?api=1&origin=${latOrigen},${lonOrigen}&destination=${latDestino},${lonDestino}&travelmode=driving`,
-    });
-
-    const urlWeb = `https://www.google.com/maps/dir/?api=1&origin=${latOrigen},${lonOrigen}&destination=${latDestino},${lonDestino}`;
-
-    try {
-      const supported = url ? await Linking.canOpenURL(url) : false;
-      if (supported && url) {
-        await Linking.openURL(url);
-      } else {
-        await Linking.openURL(urlWeb);
-      }
-    } catch {
-      await Linking.openURL(urlWeb);
-    }
-  }
-
-  // Capturar foto y guardar persistentemente en expo-file-system
-  const tomarFoto = async () => {
-    try {
-      const permiso = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permiso.granted) {
-        Alert.alert(
-          "Permiso denegado",
-          "Se requiere acceso a la cámara para tomar una foto."
-        );
-        return;
-      }
-
-      const resultado = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.7,
-      });
-
-      if (!resultado.canceled && resultado.assets[0]?.uri) {
-        const uriTemporal = resultado.assets[0].uri;
-
-        try {
-          // Copiar a almacenamiento permanente del dispositivo
-          const carpetaFotos = new Directory(Paths.document, "fotos_visitas");
-          if (!carpetaFotos.exists) {
-            carpetaFotos.create();
-          }
-
-          const archivoTemp = new File(uriTemporal);
-          const archivoDefinitivo = new File(
-            carpetaFotos,
-            `visita_${Date.now()}.jpg`
+        } catch (error) {
+          console.error(
+            "Error al cargar el detalle del lugar:",
+            error
           );
-          archivoTemp.copy(archivoDefinitivo);
-
-          setFotoUri(archivoDefinitivo.uri);
-        } catch (fsError) {
-          // Fallback seguro si falla la copia en disco
-          console.warn("No se pudo copiar al directorio permanente, usando URI temporal:", fsError);
-          setFotoUri(uriTemporal);
+        } finally {
+          if (activo) {
+            setCargando(false);
+          }
         }
       }
-    } catch (error) {
-      console.error("Error capturando foto:", error);
-      Alert.alert("Error", "No se pudo tomar la fotografía.");
-    }
-  };
 
-  // Guardar o actualizar Visita con Foto y Nota en SQLite y sincronizar con API
+      if (id) {
+        cargarDetalle();
+      }
+
+      return () => {
+        activo = false;
+      };
+    }, [id, db, usuarioIdActual])
+  );
+
+  /**
+   * Guarda o actualiza la visita.
+   * registrarVisita guarda primero en SQLite y después
+   * intenta sincronizar con el servidor.
+   */
   const handleGuardarVisitaManual = async () => {
     if (!lugar) return;
+
     if (!usuarioIdActual) {
       Alert.alert(
         "Iniciá sesión para registrar visitas",
         "Podés explorar todos los lugares libremente, pero necesitás tu cuenta para guardar visitas y fotos en Mi Recorrido.",
         [
-          { text: "Ahora no", style: "cancel" },
+          {
+            text: "Ahora no",
+            style: "cancel",
+          },
           {
             text: "Iniciar sesión",
             onPress: () =>
               router.push({
                 pathname: "/login",
-                params: { redirect: `/lugar/${lugar.id}` },
+                params: {
+                  redirect: `/lugar/${lugar.id}`,
+                },
               }),
           },
         ]
       );
+
       return;
     }
 
@@ -266,9 +208,8 @@ export default function DetalleLugarScreen() {
       );
 
       setYaVisitado(true);
-      if (resultado.fotoUri) {
-        setFotoUri(resultado.fotoUri);
-      }
+      setFotoUri(resultado.fotoUri ?? null);
+      setNota(resultado.nota ?? "");
 
       const tituloAlerta = resultado.esNueva
         ? "¡Visita registrada!"
@@ -277,23 +218,245 @@ export default function DetalleLugarScreen() {
       const mensajeAlerta = resultado.sincronizada
         ? resultado.esNueva
           ? "El lugar, tu foto y tu nota se guardaron y sincronizaron en la nube."
-          : "Se actualizó la foto y nota de este lugar en la nube."
-        : "Se guardó en tu teléfono (modo sin conexión). Se sincronizará automáticamente cuando vuelvas a tener señal.";
+          : "Se actualizó la foto y la nota de este lugar en la nube."
+        : "Se guardó en tu teléfono. Se sincronizará automáticamente cuando vuelvas a tener conexión.";
 
       Alert.alert(tituloAlerta, mensajeAlerta);
     } catch (error) {
       console.error("Error guardando visita:", error);
-      Alert.alert("Error", "No se pudo registrar la visita en la base de datos.");
+
+      Alert.alert(
+        "Error",
+        "No se pudo registrar la visita en la base de datos."
+      );
     } finally {
       setGuardandoVisita(false);
     }
   };
 
+  // Verificar si el lugar está en favoritos.
+  useEffect(() => {
+    let activo = true;
+
+    async function verificarFavorito() {
+      if (lugar?.id && user) {
+        try {
+          const favorito = await esFavorito(user, lugar.id);
+
+          if (activo) {
+            setEsFav(favorito);
+          }
+        } catch (error) {
+          console.error("Error verificando favorito:", error);
+        }
+      } else {
+        setEsFav(false);
+      }
+    }
+
+    verificarFavorito();
+
+    return () => {
+      activo = false;
+    };
+  }, [lugar?.id, user]);
+
+  async function cambiarEstrella() {
+    if (!lugar) return;
+
+    if (!user) {
+      Alert.alert(
+        "Iniciá sesión para guardar en favoritos",
+        "Podés ver todos los lugares sin cuenta. La cuenta sirve para guardar tus favoritos y tu recorrido.",
+        [
+          {
+            text: "Ahora no",
+            style: "cancel",
+          },
+          {
+            text: "Iniciar sesión",
+            onPress: () =>
+              router.push({
+                pathname: "/login",
+                params: {
+                  redirect: `/lugar/${lugar.id}`,
+                },
+              }),
+          },
+        ]
+      );
+
+      return;
+    }
+
+    try {
+      const nuevoEstado = await cambiarFavorito(
+        user,
+        lugar.id
+      );
+
+      setEsFav(nuevoEstado);
+    } catch (error) {
+      console.error("Error actualizando favorito:", error);
+
+      Alert.alert(
+        "Error",
+        "No se pudo actualizar el favorito."
+      );
+    }
+  }
+
+  async function abrirGoogleMaps() {
+    if (!lugar || !lugar.coordenadas) return;
+
+    const conectado = await hayConexionInternet();
+
+    if (!conectado) {
+      Alert.alert(
+        "Sin conexión a internet",
+        "Google Maps necesita datos móviles para trazar rutas. Podés usar el mapa principal de la app para guiarte en línea recta sin conexión.",
+        [
+          {
+            text: "Cerrar",
+            style: "cancel",
+          },
+          {
+            text: "Ir al Mapa",
+            onPress: () => router.replace("/(tabs)"),
+          },
+        ]
+      );
+
+      return;
+    }
+
+    const {
+      latitud: latDestino,
+      longitud: lonDestino,
+    } = lugar.coordenadas;
+
+    const latOrigen = ubicacionActual
+      ? ubicacionActual.latitud
+      : -32.21568;
+
+    const lonOrigen = ubicacionActual
+      ? ubicacionActual.longitud
+      : -58.13649;
+
+    const url = Platform.select({
+      ios: `maps://app?saddr=${latOrigen},${lonOrigen}&daddr=${latDestino},${lonDestino}`,
+      android: `https://www.google.com/maps/dir/?api=1&origin=${latOrigen},${lonOrigen}&destination=${latDestino},${lonDestino}&travelmode=driving`,
+    });
+
+    const urlWeb =
+      `https://www.google.com/maps/dir/?api=1` +
+      `&origin=${latOrigen},${lonOrigen}` +
+      `&destination=${latDestino},${lonDestino}`;
+
+    try {
+      const supported = url
+        ? await Linking.canOpenURL(url)
+        : false;
+
+      if (supported && url) {
+        await Linking.openURL(url);
+      } else {
+        await Linking.openURL(urlWeb);
+      }
+    } catch {
+      await Linking.openURL(urlWeb);
+    }
+  }
+
+  /**
+   * Captura una foto y la copia al almacenamiento permanente.
+   * Esto permite conservarla aunque la aplicación se cierre
+   * o no haya conexión a internet.
+   */
+  const tomarFoto = async () => {
+    try {
+      const permiso =
+        await ImagePicker.requestCameraPermissionsAsync();
+
+      if (!permiso.granted) {
+        Alert.alert(
+          "Permiso denegado",
+          "Se requiere acceso a la cámara para tomar una foto."
+        );
+
+        return;
+      }
+
+      const resultado = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.7,
+      });
+
+      if (
+        !resultado.canceled &&
+        resultado.assets[0]?.uri
+      ) {
+        const uriTemporal = resultado.assets[0].uri;
+
+        try {
+          const carpetaFotos = new Directory(
+            Paths.document,
+            "fotos_visitas"
+          );
+
+          if (!carpetaFotos.exists) {
+            carpetaFotos.create();
+          }
+
+          const archivoTemp = new File(uriTemporal);
+
+          const archivoDefinitivo = new File(
+            carpetaFotos,
+            `visita_${Date.now()}.jpg`
+          );
+
+          archivoTemp.copy(archivoDefinitivo);
+
+          setFotoUri(archivoDefinitivo.uri);
+        } catch (errorFilesystem) {
+          console.warn(
+            "No se pudo copiar al directorio permanente. Se utilizará la URI temporal:",
+            errorFilesystem
+          );
+
+          setFotoUri(uriTemporal);
+        }
+      }
+    } catch (error) {
+      console.error("Error capturando foto:", error);
+
+      Alert.alert(
+        "Error",
+        "No se pudo tomar la fotografía."
+      );
+    }
+  };
+
   if (cargando) {
     return (
-      <View style={[styles.centrado, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.textoCargando, { color: colors.textSecondary }]}>
+      <View
+        style={[
+          styles.centrado,
+          { backgroundColor: colors.background },
+        ]}
+      >
+        <ActivityIndicator
+          size="large"
+          color={colors.primary}
+        />
+
+        <Text
+          style={[
+            styles.textoCargando,
+            { color: colors.textSecondary },
+          ]}
+        >
           Cargando detalle...
         </Text>
       </View>
@@ -302,16 +465,37 @@ export default function DetalleLugarScreen() {
 
   if (!lugar) {
     return (
-      <View style={[styles.centrado, { backgroundColor: colors.background }]}>
-        <Ionicons name="alert-circle-outline" size={48} color="#e74c3c" />
-        <Text style={[styles.errorText, { color: colors.text }]}>
+      <View
+        style={[
+          styles.centrado,
+          { backgroundColor: colors.background },
+        ]}
+      >
+        <Ionicons
+          name="alert-circle-outline"
+          size={48}
+          color="#e74c3c"
+        />
+
+        <Text
+          style={[
+            styles.errorText,
+            { color: colors.text },
+          ]}
+        >
           No se encontró el lugar solicitado.
         </Text>
+
         <TouchableOpacity
-          style={[styles.backButton, { backgroundColor: colors.primary }]}
+          style={[
+            styles.backButton,
+            { backgroundColor: colors.primary },
+          ]}
           onPress={() => router.back()}
         >
-          <Text style={styles.backButtonText}>Volver</Text>
+          <Text style={styles.backButtonText}>
+            Volver
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -319,11 +503,14 @@ export default function DetalleLugarScreen() {
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
+      style={[
+        styles.container,
+        { backgroundColor: colors.background },
+      ]}
       bounces={false}
       contentContainerStyle={{ paddingBottom: 40 }}
     >
-      {/* 1. Carrusel de Imágenes */}
+      {/* Carrusel de imágenes */}
       <CarruselImagenes
         imagenes={lugar.imagenes}
         colors={colors}
@@ -332,20 +519,33 @@ export default function DetalleLugarScreen() {
       />
 
       <View style={styles.content}>
-        <Text style={[styles.categoria, { color: colors.primary }]}>
+        <Text
+          style={[
+            styles.categoria,
+            { color: colors.primary },
+          ]}
+        >
           {lugar.categoriaId
             ? lugar.categoriaId.toUpperCase().replace("CAT-", "")
             : "TURISMO"}
         </Text>
 
         <View style={styles.filaTitulo}>
-          <Text style={[styles.title, { color: colors.text }]}>
+          <Text
+            style={[
+              styles.title,
+              { color: colors.text },
+            ]}
+          >
             {lugar.nombre}
           </Text>
+
           <TouchableOpacity
             onPress={cambiarEstrella}
             accessibilityLabel={
-              esFav ? "Quitar de favoritos" : "Agregar a favoritos"
+              esFav
+                ? "Quitar de favoritos"
+                : "Agregar a favoritos"
             }
           >
             <Ionicons
@@ -362,37 +562,57 @@ export default function DetalleLugarScreen() {
             size={16}
             color={colors.textSecondary}
           />
+
           <Text
-            style={[styles.coordenadasText, { color: colors.textSecondary }]}
+            style={[
+              styles.coordenadasText,
+              { color: colors.textSecondary },
+            ]}
           >
             {lugar.direccion}
           </Text>
         </View>
 
-        {/* 2. Reproductor de Audioguía (Solo se muestra si hay conexión a internet y el lugar tiene audioguía) */}
+        {/* Audioguía */}
         {tieneInternet && lugar.audioguia && (
-          <ReproductorAudio audioguia={lugar.audioguia} colors={colors} />
+          <ReproductorAudio
+            audioguia={lugar.audioguia}
+            colors={colors}
+          />
         )}
 
-        {/* Botón Cómo llegar */}
+        {/* Cómo llegar */}
         <TouchableOpacity
           style={[
             styles.mapButton,
             {
-              backgroundColor: theme === "dark" ? colors.card : "#e8f4fd",
+              backgroundColor:
+                theme === "dark"
+                  ? colors.card
+                  : "#e8f4fd",
               borderColor: colors.border,
               borderWidth: theme === "dark" ? 1 : 0,
             },
           ]}
           onPress={abrirGoogleMaps}
         >
-          <Ionicons name="navigate-outline" size={18} color="#2980b9" />
-          <Text style={[styles.mapButtonText, { color: "#2980b9" }]}>
+          <Ionicons
+            name="navigate-outline"
+            size={18}
+            color="#2980b9"
+          />
+
+          <Text
+            style={[
+              styles.mapButtonText,
+              { color: "#2980b9" },
+            ]}
+          >
             Cómo llegar (Google Maps / Línea Recta Offline)
           </Text>
         </TouchableOpacity>
 
-        {/* 3. Insignias de información */}
+        {/* Insignias */}
         <InfoLugaresBadges
           precioEntrada={lugar.precioEntrada}
           accesible={lugar.accesible}
@@ -403,9 +623,15 @@ export default function DetalleLugarScreen() {
         {/* Contacto */}
         {(lugar.telefono || lugar.sitioWeb) && (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: colors.text },
+              ]}
+            >
               Contacto
             </Text>
+
             <View style={styles.contactoInlineContainer}>
               {lugar.telefono && (
                 <TouchableOpacity
@@ -417,20 +643,27 @@ export default function DetalleLugarScreen() {
                       borderWidth: theme === "dark" ? 1 : 0,
                     },
                   ]}
-                  onPress={() => Linking.openURL(`tel:${lugar.telefono}`)}
+                  onPress={() =>
+                    Linking.openURL(`tel:${lugar.telefono}`)
+                  }
                 >
                   <Ionicons
                     name="call-outline"
                     size={16}
                     color={colors.primary}
                   />
+
                   <Text
-                    style={[styles.contactoChipText, { color: colors.primary }]}
+                    style={[
+                      styles.contactoChipText,
+                      { color: colors.primary },
+                    ]}
                   >
                     {lugar.telefono}
                   </Text>
                 </TouchableOpacity>
               )}
+
               {lugar.sitioWeb && (
                 <TouchableOpacity
                   style={[
@@ -441,10 +674,22 @@ export default function DetalleLugarScreen() {
                       borderWidth: theme === "dark" ? 1 : 0,
                     },
                   ]}
-                  onPress={() => Linking.openURL(lugar.sitioWeb!)}
+                  onPress={() =>
+                    Linking.openURL(lugar.sitioWeb!)
+                  }
                 >
-                  <Ionicons name="globe-outline" size={16} color="#2980b9" />
-                  <Text style={[styles.contactoChipText, { color: "#2980b9" }]}>
+                  <Ionicons
+                    name="globe-outline"
+                    size={16}
+                    color="#2980b9"
+                  />
+
+                  <Text
+                    style={[
+                      styles.contactoChipText,
+                      { color: "#2980b9" },
+                    ]}
+                  >
                     Sitio Web
                   </Text>
                 </TouchableOpacity>
@@ -453,20 +698,34 @@ export default function DetalleLugarScreen() {
           </View>
         )}
 
-        {/* 4. Horarios de Apertura */}
-        <HorariosAtencion horarios={lugar.horarios} colors={colors} />
+        {/* Horarios */}
+        <HorariosAtencion
+          horarios={lugar.horarios}
+          colors={colors}
+        />
 
         {/* Descripción */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: colors.text },
+            ]}
+          >
             Acerca del lugar
           </Text>
-          <Text style={[styles.description, { color: colors.textSecondary }]}>
+
+          <Text
+            style={[
+              styles.description,
+              { color: colors.textSecondary },
+            ]}
+          >
             {lugar.descripcion}
           </Text>
         </View>
 
-        {/* 5. SECCIÓN BITÁCORA: Foto y Nota Personalizada de la Visita */}
+        {/* Bitácora personal */}
         {Boolean(usuarioIdActual) && (
           <View
             style={[
@@ -478,39 +737,65 @@ export default function DetalleLugarScreen() {
               },
             ]}
           >
-            <Text style={[styles.cardTitulo, { color: colors.text }]}>
+            <Text
+              style={[
+                styles.cardTitulo,
+                { color: colors.text },
+              ]}
+            >
               {yaVisitado
                 ? "Bitácora de este lugar (Ya en tu recorrido)"
                 : "Bitácora personal de la visita"}
             </Text>
 
-            {/* Botón Tomar Foto */}
+            {/* Tomar foto */}
             <TouchableOpacity
               style={[
                 styles.btnFoto,
                 {
-                  backgroundColor: theme === "dark" ? "#1e3a29" : "#e8f8f0",
+                  backgroundColor:
+                    theme === "dark"
+                      ? "#1e3a29"
+                      : "#e8f8f0",
                 },
               ]}
               onPress={tomarFoto}
             >
-              <Ionicons name="camera-outline" size={20} color={colors.primary} />
-              <Text style={[styles.btnFotoTexto, { color: colors.primary }]}>
-                {fotoUri ? "Tomar nueva foto" : "Tomar foto en este lugar"}
+              <Ionicons
+                name="camera-outline"
+                size={20}
+                color={colors.primary}
+              />
+
+              <Text
+                style={[
+                  styles.btnFotoTexto,
+                  { color: colors.primary },
+                ]}
+              >
+                {fotoUri
+                  ? "Tomar nueva foto"
+                  : "Tomar foto en este lugar"}
               </Text>
             </TouchableOpacity>
 
-            {/* Previsualización de Foto Tomada */}
+            {/* Previsualización */}
             {fotoUri ? (
-              <Image source={{ uri: fotoUri }} style={styles.fotoPreview} />
+              <Image
+                source={{ uri: fotoUri }}
+                style={styles.fotoPreview}
+              />
             ) : null}
 
-            {/* Campo para Escribir Nota Corta */}
+            {/* Nota */}
             <TextInput
               style={[
                 styles.inputNota,
                 {
-                  backgroundColor: theme === "dark" ? "#2a2a2a" : "#fafafa",
+                  backgroundColor:
+                    theme === "dark"
+                      ? "#2a2a2a"
+                      : "#fafafa",
                   color: colors.text,
                   borderColor: colors.border,
                 },
@@ -523,7 +808,7 @@ export default function DetalleLugarScreen() {
               multiline
             />
 
-            {/* Botón Guardar en Mi Recorrido */}
+            {/* Guardar */}
             <TouchableOpacity
               style={[
                 styles.btnGuardar,
@@ -533,13 +818,18 @@ export default function DetalleLugarScreen() {
               onPress={handleGuardarVisitaManual}
               disabled={guardandoVisita}
             >
-              <Ionicons name="bookmark-outline" size={18} color="#fff" />
+              <Ionicons
+                name="bookmark-outline"
+                size={18}
+                color="#fff"
+              />
+
               <Text style={styles.btnGuardarTexto}>
                 {guardandoVisita
                   ? "Guardando..."
                   : yaVisitado
-                  ? "Actualizar foto y nota"
-                  : "Registrar en Mi Recorrido"}
+                    ? "Actualizar foto y nota"
+                    : "Registrar en Mi Recorrido"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -550,18 +840,38 @@ export default function DetalleLugarScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
   centrado: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
   },
-  textoCargando: { marginTop: 10, fontSize: 16 },
-  errorText: { fontSize: 16, marginTop: 10, marginBottom: 20 },
-  content: { padding: 16 },
-  categoria: { fontSize: 11, fontWeight: "bold", marginBottom: 4 },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 4, flex: 1 },
+  textoCargando: {
+    marginTop: 10,
+    fontSize: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  content: {
+    padding: 16,
+  },
+  categoria: {
+    fontSize: 11,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 4,
+    flex: 1,
+  },
   filaTitulo: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -573,7 +883,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
-  coordenadasText: { fontSize: 12, marginLeft: 4 },
+  coordenadasText: {
+    fontSize: 12,
+    marginLeft: 4,
+  },
   mapButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -584,11 +897,27 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 14,
   },
-  mapButtonText: { fontSize: 13, fontWeight: "bold" },
-  section: { marginBottom: 14 },
-  sectionTitle: { fontSize: 15, fontWeight: "bold", marginBottom: 6 },
-  description: { fontSize: 13, lineHeight: 20 },
-  contactoInlineContainer: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  mapButtonText: {
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+  section: {
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "bold",
+    marginBottom: 6,
+  },
+  description: {
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  contactoInlineContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
   contactoChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -597,11 +926,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 6,
   },
-  contactoChipText: { fontSize: 13, fontWeight: "600" },
-  backButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
-  backButtonText: { color: "#fff", fontWeight: "bold" },
-
-  // Estilos de la Bitácora (Foto + Nota)
+  contactoChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  backButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
   cardRegistro: {
     padding: 16,
     borderRadius: 12,
@@ -612,7 +949,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  cardTitulo: { fontSize: 16, fontWeight: "bold", marginBottom: 12 },
+  cardTitulo: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
   btnFoto: {
     flexDirection: "row",
     alignItems: "center",
@@ -622,8 +963,16 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
-  btnFotoTexto: { fontWeight: "600", fontSize: 14 },
-  fotoPreview: { width: "100%", height: 180, borderRadius: 8, marginBottom: 12 },
+  btnFotoTexto: {
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  fotoPreview: {
+    width: "100%",
+    height: 180,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
   inputNota: {
     borderWidth: 1,
     borderRadius: 8,
@@ -641,5 +990,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 6,
   },
-  btnGuardarTexto: { color: "#fff", fontWeight: "bold", fontSize: 14 },
+  btnGuardarTexto: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
 });
